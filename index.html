@@ -77,6 +77,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .pwwrap{position:relative}
 .pwwrap input{padding-right:46px}
 .pweye{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:8px}
+.thumbwrap{position:relative;display:inline-block}
+.thumbdel{position:absolute;top:-7px;right:-7px;background:var(--bad);color:#fff;border:none;border-radius:999px;width:21px;height:21px;font-size:11px;cursor:pointer;line-height:1;font-weight:700}
 </style>
 </head>
 <body>
@@ -205,10 +207,25 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     <button class="btn ghost" id="btnSaveDraft">Save</button>
     <div class="gap"></div>
     <button class="btn amber" id="btnSubmit">Submit drop</button>
+    <div class="gap"></div>
+    <button class="btn ghost" id="btnDetails">📋 Details (copy for Viber)</button>
   </div>
 </div>
 
 <div class="modal" id="photoModal"><button class="close" id="modalClose">✕</button><img id="modalImg" alt=""></div>
+<div class="modal" id="detModal">
+  <div class="card" style="max-width:430px;width:100%;max-height:88vh;overflow:auto">
+    <div class="st">DROP DETAILS</div>
+    <textarea id="detText" style="min-height:300px;font-size:13px;line-height:1.6"></textarea>
+    <div class="gap"></div>
+    <div class="row">
+      <button class="btn amber" id="btnDetCopy">Copy</button>
+      <button class="btn ghost" id="btnDetShare">Share…</button>
+    </div>
+    <div class="gap"></div>
+    <button class="btn ghost" id="btnDetClose">Close</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <input type="file" accept="image/*" capture="environment" id="camFile" hidden>
 
@@ -444,12 +461,26 @@ function autoColl(){
 }
 
 function renderPhotos(){
+  const locked = dropData && dropData.status==='submitted';
   ['si','dr','payment','arrival','received','departure'].forEach(kind=>{
     const box=$('ph-'+kind);if(!box)return;box.innerHTML='';
     dropPhotos.filter(p=>p.kind===kind).forEach(p=>{
+      const w=document.createElement('div');w.className='thumbwrap';
       const im=document.createElement('img');im.className='thumb';im.src=p.data;
       im.onclick=()=>{$('modalImg').src=p.data;$('photoModal').classList.add('on');};
-      box.appendChild(im);
+      w.appendChild(im);
+      if(!locked){
+        const del=document.createElement('button');del.className='thumbdel';del.textContent='✕';del.title='Remove photo';
+        del.onclick=async ev=>{
+          ev.stopPropagation();
+          if(!confirm('Remove this '+kind+' photo?'))return;
+          await db.collection('tt_photos').doc(p.id).delete();
+          log('photo.delete',(dropData.ticket||'')+'/'+(dropData.doc||curDrop),kind);
+          toast('Photo removed');
+        };
+        w.appendChild(del);
+      }
+      box.appendChild(w);
     });
   });
 }
@@ -562,7 +593,51 @@ $('btnSubmit').onclick=async()=>{
   await db.collection('tt_drops').doc(curDrop).update(f);
   log('drop.submit',dropData.ticket+'/'+(f.doc||curDrop),f.delStatus+' · '+(f.customer||''));
   toast('Drop submitted ✓');
-  show('vTrip');
+  await openDetails({...dropData,...f});
+};
+
+/* ============ details for Viber ============ */
+async function buildDetails(s){
+  let dropNo='';
+  try{
+    const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
+    const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
+    arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    const i=arr.findIndex(x=>x.id===(s.id||curDrop));if(i>-1)dropNo=i+1;
+  }catch(e){}
+  return 'Trip Ticket #: '+(s.ticket||'')+
+'\nDate: '+(s.date||'')+
+'\nDrop #: '+(dropNo||'')+
+'\nS.I #: '+(s.si||'')+
+'\nDoc #: '+(s.doc||'')+
+'\nAmount: '+(s.amount||'')+
+'\nC.R. #: '+(s.cr||'')+
+'\nCheck #: '+(s.payref||'')+
+'\nCustomer: '+(s.customer||'')+
+'\nArrival: '+(s.arrival||'')+
+'\nTime Received: '+(s.received||'')+
+'\nDeparture: '+(s.departure||'')+
+'\nDel. Status: '+(s.delStatus||'')+
+'\nColl. Status: '+(s.collStatus||'')+
+'\nMOP: '+(s.mop||'')+
+'\nPlate #: '+(s.plate||'')+
+'\nLocation: '+(s.location||'')+
+'\nRemarks: '+(s.remarks||'');
+}
+async function openDetails(s){
+  $('detText').value=await buildDetails(s||dropData);
+  $('detModal').classList.add('on');
+}
+$('btnDetails').onclick=()=>openDetails(dropData);
+$('btnDetClose').onclick=()=>$('detModal').classList.remove('on');
+$('btnDetCopy').onclick=async()=>{
+  try{await navigator.clipboard.writeText($('detText').value);toast('Copied — paste it in Viber');}
+  catch(e){$('detText').select();document.execCommand('copy');toast('Copied');}
+};
+$('btnDetShare').onclick=async()=>{
+  const text=$('detText').value;
+  if(navigator.share){try{await navigator.share({text});return;}catch(e){}}
+  location.href='viber://forward?text='+encodeURIComponent(text);
 };
 
 /* ============ GPS ============ */
