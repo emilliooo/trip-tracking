@@ -190,6 +190,17 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     <div class="st">CREW</div>
     <div id="usersList" class="note">Loading…</div>
   </div>
+  <div class="card">
+    <div class="st">VEHICLES</div>
+    <div class="row">
+      <div><label>Vehicle type</label><input id="nvType" placeholder="e.g. L300 Van"></div>
+      <div><label>Plate #</label><input id="nvPlate" placeholder="e.g. ABC 1234"></div>
+    </div>
+    <div class="gap"></div>
+    <button class="btn amber" id="btnAddVehicle">Add vehicle</button>
+    <div class="gap"></div>
+    <div id="vehiclesList" class="note">No vehicles yet.</div>
+  </div>
 </div>
 
 <!-- HISTORY -->
@@ -326,7 +337,7 @@ function boot(){
     me={uid:'test-admin'};meDoc={name:'Test Admin',role:'admin'};
     $('whoami').textContent='⚠ TEST MODE — no sign-in, data clears on refresh';
     $('vSignin').style.display='none';$('vApp').style.display='block';$('mainNav').style.display='flex';
-    startTrips();startUsers();loadLogs(true);
+    startTrips();startUsers();startVehicles();loadLogs(true);
     return;
   }
   const cfg=getCfg();if(!cfg)return;
@@ -347,7 +358,7 @@ function boot(){
     $('vSignin').style.display='none';$('vApp').style.display='block';$('mainNav').style.display='flex';
     const s=await db.collection('tt_settings').doc('config').get();
     if(s.exists&&s.data().geminiKey)$('setGemini').value=s.data().geminiKey;
-    startTrips();startUsers();loadLogs(true);
+    startTrips();startUsers();startVehicles();loadLogs(true);
   });
 }
 $('btnSignin').onclick=async()=>{
@@ -576,12 +587,14 @@ $('btnEnroll').onclick=async()=>{
     $('npName').value='';$('npEmail').value='';$('npPass').value='';
   }catch(e){$('peopleErr').textContent=e.message;$('peopleErr').style.display='block';}
 };
+let usersCache=[],vehicles=[];
 function startUsers(){
   if(unsubUsers)unsubUsers();
   unsubUsers=db.collection('tt_users').onSnapshot(snap=>{
+    usersCache=[];
     const list=$('usersList');list.innerHTML='';
     snap.forEach(d=>{
-      const u=d.data();
+      const u=d.data();usersCache.push({uid:d.id,...u});
       const row=document.createElement('div');row.className='userrow';
       row.innerHTML=`<span>${esc(u.name||u.email)} <span class="note">· ${esc(u.role)} · ${esc(u.email)}</span></span>
         ${u.role!=='admin'?`<button class="btn ghost small">${u.active===false?'Enable':'Disable'}</button>`:''}`;
@@ -593,6 +606,62 @@ function startUsers(){
       };
       list.appendChild(row);
     });
+    renderVehicles();
+  });
+}
+
+/* ============ vehicles ============ */
+function startVehicles(){
+  db.collection('tt_settings').doc('vehicles').onSnapshot(d=>{
+    vehicles=d.exists?(d.data().list||[]):[];renderVehicles();
+  });
+}
+function saveVehicles(){return db.collection('tt_settings').doc('vehicles').set({list:vehicles},{merge:true});}
+$('btnAddVehicle').onclick=async()=>{
+  const type=$('nvType').value.trim(),plate=$('nvPlate').value.trim();
+  if(!type||!plate){toast('Fill vehicle type and plate #');return;}
+  vehicles.push({id:Math.random().toString(36).slice(2,9),type,plate,driverUid:'',driverName:'',loaderUid:'',loaderName:''});
+  await saveVehicles();
+  log('vehicle.add',plate,type);
+  $('nvType').value='';$('nvPlate').value='';
+  toast('Vehicle added');
+};
+function crewOptions(sel){
+  const crew=usersCache.filter(u=>u.role==='field'&&u.active!==false);
+  return '<option value="">— none —</option>'+crew.map(u=>`<option value="${esc(u.uid)}" ${u.uid===sel?'selected':''}>${esc(u.name||u.email)}</option>`).join('');
+}
+function renderVehicles(){
+  const box=$('vehiclesList');if(!box)return;
+  if(!vehicles.length){box.innerHTML='No vehicles yet.';return;}
+  box.innerHTML='';
+  vehicles.forEach(v=>{
+    const row=document.createElement('div');
+    row.style.cssText='border:1px dashed var(--line);border-radius:11px;padding:11px;margin-bottom:9px';
+    row.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <b style="color:var(--text)">${esc(v.type)} · ${esc(v.plate)}</b>
+        <button class="btn ghost small v-del">Remove</button></div>
+      <div class="row">
+        <div><label>Driver</label><select class="v-drv">${crewOptions(v.driverUid)}</select></div>
+        <div><label>Loader</label><select class="v-ldr">${crewOptions(v.loaderUid)}</select></div>
+      </div>`;
+    const upd=async()=>{
+      const d=usersCache.find(u=>u.uid===row.querySelector('.v-drv').value);
+      const l=usersCache.find(u=>u.uid===row.querySelector('.v-ldr').value);
+      v.driverUid=d?d.uid:'';v.driverName=d?(d.name||d.email):'';
+      v.loaderUid=l?l.uid:'';v.loaderName=l?(l.name||l.email):'';
+      await saveVehicles();
+      log('vehicle.assign',v.plate,'Driver: '+(v.driverName||'—')+' / Loader: '+(v.loaderName||'—'));
+      toast('Assignment saved');
+    };
+    row.querySelector('.v-drv').onchange=upd;
+    row.querySelector('.v-ldr').onchange=upd;
+    row.querySelector('.v-del').onclick=async()=>{
+      if(!confirm('Remove '+v.plate+'?'))return;
+      vehicles=vehicles.filter(x=>x.id!==v.id);
+      await saveVehicles();
+      log('vehicle.remove',v.plate,v.type);
+    };
+    box.appendChild(row);
   });
 }
 
