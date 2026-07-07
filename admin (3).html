@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E1B2C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trips Admin">
+<link rel="apple-touch-icon" href="truck-icon.png">
+<link rel="icon" href="truck-icon.png">
+<title>Trip Tracker · Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+:root{--ink:#0E1B2C;--panel:#16263C;--panel2:#1D3049;--line:#26405F;--amber:#FFB020;
+--text:#E8EDF4;--muted:#8DA2BC;--ok:#3DD68C;--bad:#FF6B6B;--warn:#FF9A3D;--r:14px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--ink);color:var(--text);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{max-width:560px;margin:0 auto;padding:16px 16px 90px}
+header{display:flex;align-items:center;gap:12px;padding:6px 2px 16px}
+.logo{width:40px;height:40px;border-radius:10px;background:var(--amber);display:grid;place-items:center;flex:none;font-size:20px}
+h1{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:24px;letter-spacing:.5px;line-height:1}
+.sub{color:var(--muted);font-size:12px;margin-top:2px}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--line);display:flex;max-width:560px;margin:0 auto;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:none;color:var(--muted);font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;letter-spacing:.7px;padding:13px 0 11px;cursor:pointer;border-top:2px solid transparent}
+nav button.on{color:var(--amber);border-top-color:var(--amber)}
+.page{display:none}.page.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:13px}
+label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+input,select,textarea{width:100%;background:var(--ink);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px 12px;font-size:15px;font-family:inherit}
+textarea{min-height:58px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-offset:1px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:11px;padding:13px 16px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;width:100%}
+.btn.amber{background:var(--amber);color:#12100A}
+.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.btn.small{width:auto;padding:9px 13px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.gap{height:11px}
+.st{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:17px;letter-spacing:.6px;margin-bottom:10px}
+.note{font-size:12px;color:var(--muted);line-height:1.5}
+.err{background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.4);color:var(--bad);border-radius:10px;padding:11px 13px;font-size:13px;margin-bottom:12px;display:none}
+.badge{border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600}
+.badge.active{background:rgba(255,176,32,.15);color:var(--amber)}
+.badge.done{background:rgba(61,214,140,.15);color:var(--ok)}
+.tripcards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}
+.tcard .tk{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px}
+.tcard .who{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:10px;cursor:pointer}
+.item .t1{font-weight:600;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.item .t2{color:var(--muted);font-size:12px;margin-top:3px}
+.item.d-delivered .t1 span:first-child{color:var(--ok)}
+.item.d-undelivered{border:1px solid var(--bad)}
+.item.d-undelivered .t1 span:first-child{color:var(--bad)}
+.item.d-partial .t1 span:first-child{color:var(--warn)}
+.back{background:none;border:none;color:var(--amber);font-size:14px;font-weight:600;cursor:pointer;padding:0 0 12px;font-family:inherit}
+.slot{border:1px dashed var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.slot .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.slot .name{font-size:13px;font-weight:600}
+.slot .time{font-size:12px;color:var(--muted)}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:pointer}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 10px;line-height:1.7}
+.modal{position:fixed;inset:0;background:rgba(4,10,18,.92);display:none;place-items:center;z-index:50;padding:16px}
+.modal.on{display:grid}
+.modal img{max-width:100%;max-height:82vh;border-radius:12px}
+.modal .close{position:absolute;top:18px;right:18px;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:999px;width:38px;height:38px;font-size:17px;cursor:pointer}
+.toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 18px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:60}
+.toast.show{opacity:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.grid2 .full{grid-column:1/-1}
+.kv{background:var(--ink);border:1px solid var(--line);border-radius:10px;padding:8px 11px}
+.kv .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.logrow{border-bottom:1px solid var(--line);padding:9px 2px;font-size:12.5px;line-height:1.55}
+.logrow .who{color:var(--amber);font-weight:600}
+.logrow .when{color:var(--muted);font-size:11px}
+.userrow{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:10px 2px;font-size:13.5px}
+#userBar{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:12px}
+#userBar button{background:none;border:none;color:var(--amber);font-weight:600;cursor:pointer;font-family:inherit;font-size:12px}
+.pwwrap{position:relative}
+.pwwrap input{padding-right:46px}
+.pweye{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);font-size:17px;cursor:pointer;padding:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🗂️</div>
+  <div><h1>TRIP TRACKER</h1><div class="sub">Admin</div></div>
+</header>
+
+<!-- SIGN IN -->
+<div id="vSignin">
+  <div class="card">
+    <div class="st">ADMIN SIGN IN</div>
+    <div class="err" id="authErr"></div>
+    <label>Email</label><input id="inEmail" type="email" autocomplete="username">
+    <div class="gap"></div>
+    <label>Password</label>
+    <div class="pwwrap"><input id="inPass" type="password" autocomplete="current-password"><button type="button" class="pweye" id="eye1">👁</button></div>
+    <div class="gap"></div>
+    <button class="btn amber" id="btnSignin">Sign in</button>
+    <div class="gap"></div>
+    <button class="btn ghost" id="btnFirstTime">First time? Create the admin account</button>
+  </div>
+</div>
+
+<div id="vApp" style="display:none">
+<div id="userBar"><span id="whoami"></span><button id="btnOut">Sign out</button></div>
+
+<!-- TRIPS -->
+<div class="page on" id="page-trips">
+  <div id="homeView">
+    <div class="st">ONGOING TRIPS</div>
+    <div class="tripcards" id="ongoing"></div>
+    <div class="gap"></div><div class="gap"></div>
+    <div class="st">COMPLETED</div>
+    <div id="doneList"></div>
+  </div>
+
+  <div id="tripView" style="display:none">
+    <button class="back" id="backHome">‹ Trips</button>
+    <div class="card" id="tripHead"></div>
+    <div id="dropsList"></div>
+  </div>
+
+  <div id="dropView" style="display:none">
+    <button class="back" id="backTrip">‹ Drops</button>
+    <div class="card">
+      <div class="st">DOCUMENTS</div>
+      <div class="slot"><div class="head"><span class="name">Sales Invoice</span></div><div class="thumbs" id="ph-si"><span class="note">None</span></div></div>
+      <div class="slot"><div class="head"><span class="name">Delivery Receipt</span></div><div class="thumbs" id="ph-dr"><span class="note">None</span></div></div>
+      <div class="slot" id="slotPay" style="display:none"><div class="head"><span class="name">Payment proof</span></div><div class="thumbs" id="ph-payment"></div></div>
+    </div>
+    <div class="card">
+      <div class="st">TIMELINE</div>
+      <div class="slot"><div class="head"><span class="name">Arrival</span><span class="time" id="tArr">—</span></div><div class="thumbs" id="ph-arrival"></div></div>
+      <div class="slot"><div class="head"><span class="name">Time Received</span><span class="time" id="tRec">—</span></div><div class="thumbs" id="ph-received"></div></div>
+      <div class="slot"><div class="head"><span class="name">Departure</span><span class="time" id="tDep">—</span></div><div class="thumbs" id="ph-departure"></div></div>
+    </div>
+    <div class="card">
+      <div class="st">DETAILS (admin edit)</div>
+      <div class="grid2">
+        <div class="kv"><div class="k">Trip Ticket #</div><div id="fTicket">—</div></div>
+        <div class="kv"><div class="k">Date</div><div id="fDate">—</div></div>
+        <div><label>S.I #</label><input id="fSi"></div>
+        <div><label>Doc #</label><input id="fDoc"></div>
+        <div><label>Amount</label><input id="fAmt"></div>
+        <div><label>C.R #</label><input id="fCr"></div>
+        <div class="full"><label>Payment Ref</label><input id="fPayref"></div>
+        <div class="full"><label>Customer</label><input id="fCust"></div>
+        <div><label>MOP</label>
+          <select id="fMop"><option></option><option>COD</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select></div>
+        <div><label>Plate #</label><input id="fPlate"></div>
+        <div class="full"><label>Location</label><input id="fLoc"></div>
+        <div><label>Del. Status</label>
+          <select id="fDel"><option></option><option>Delivered</option><option>Undelivered</option><option>Partial</option></select></div>
+        <div><label>Coll Status</label>
+          <select id="fColl"><option>N/A</option><option>Collected</option></select></div>
+        <div class="full"><label>Remarks</label><textarea id="fRem"></textarea></div>
+      </div>
+      <div class="gap"></div>
+      <button class="btn amber" id="btnAdminSave">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- PEOPLE -->
+<div class="page" id="page-people">
+  <div class="card">
+    <div class="st">ENROLL DRIVER / HELPER</div>
+    <div class="err" id="peopleErr"></div>
+    <label>Full name</label><input id="npName">
+    <div class="gap"></div>
+    <label>Email (their personal email is fine)</label><input id="npEmail" type="email">
+    <div class="gap"></div>
+    <label>Password (share it with them; min 6 characters)</label><input id="npPass" type="text">
+    <div class="gap"></div>
+    <button class="btn amber" id="btnEnroll">Create field account</button>
+  </div>
+  <div class="card">
+    <div class="st">CREW</div>
+    <div id="usersList" class="note">Loading…</div>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div class="page" id="page-history">
+  <div class="card">
+    <div class="st">ACTION HISTORY</div>
+    <div class="note" style="margin-bottom:10px">Every action, oldest last. Records cannot be edited or deleted — enforced by database rules.</div>
+    <div id="logsList">Loading…</div>
+    <div class="gap"></div>
+    <button class="btn ghost" id="btnMoreLogs">Load older</button>
+  </div>
+</div>
+
+<!-- EXPORT / SETTINGS -->
+<div class="page" id="page-settings">
+  <div class="card">
+    <div class="st">EXPORT</div>
+    <button class="btn ghost" id="btnExportCsv">⬇ Export all drops to CSV</button>
+  </div>
+  <div class="card">
+    <div class="st">DR. CAN ENGINE</div>
+    <label>Gemini API key (shared with all field devices)</label>
+    <input id="setGemini" type="password" placeholder="AIza...">
+    <div class="gap"></div>
+    <button class="btn amber" id="btnSaveGemini">Save key</button>
+    <div class="gap"></div>
+    <div class="note">Free key from aistudio.google.com/apikey. Field devices fetch this after sign-in so the crew never handles keys.</div>
+  </div>
+</div>
+
+</div><!-- /vApp -->
+
+<nav id="mainNav" style="display:none">
+  <button class="on" data-page="trips">TRIPS</button>
+  <button data-page="people">PEOPLE</button>
+  <button data-page="history">HISTORY</button>
+  <button data-page="settings">SETTINGS</button>
+</nav>
+
+<div class="modal" id="photoModal"><button class="close" id="modalClose">✕</button><img id="modalImg" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ CONFIG — paste your Firebase config here once ============ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA6NcOmvYrXm9D3aNOBoZ0k9-uQdiX62hY",
+  authDomain: "trip-tracking-7bfed.firebaseapp.com",
+  projectId: "trip-tracking-7bfed",
+  storageBucket: "trip-tracking-7bfed.firebasestorage.app",
+  messagingSenderId: "792354160988",
+  appId: "1:792354160988:web:c6ffcea3fd06eea9c58199"
+};
+/* ======================================================================= */
+
+/* ============ TEST MODE — set to false when going live ============ */
+const TEST_MODE = true;
+/* =================================================================== */
+
+const LS='tta_settings';
+let settings=JSON.parse(localStorage.getItem(LS)||'{}');
+let db=null,me=null,meDoc=null;
+let curTrip=null,curDrop=null,dropData=null,dropPhotos=[];
+let unsubTrips=null,unsubDrops=null,unsubPhotos=null,unsubUsers=null;
+let logsCursor=null;
+let allTrips=[],allDropsCache=null;
+
+const $=id=>document.getElementById(id);
+const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let SV=()=>Date.now();
+
+/* ---- in-memory mock DB for TEST MODE (no Firebase needed) ---- */
+function makeMockDb(){
+  const store={},listeners=[];
+  const genId=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+  const snap=(docs)=>({empty:docs.length===0,forEach:fn=>docs.forEach(d=>fn({id:d.__id,data:()=>({...d})}))});
+  function run(q){
+    let docs=Object.entries(store[q.coll]||{}).map(([id,d])=>({...d,__id:id}));
+    (q.wheres||[]).forEach(w=>docs=docs.filter(d=>d[w.f]===w.v));
+    if(q.ord)docs.sort((a,b)=>{const x=a[q.ord.f]??0,y=b[q.ord.f]??0;return q.ord.dir==='desc'?(y>x?1:x>y?-1:0):(x>y?1:y>x?-1:0);});
+    if(q.lim)docs=docs.slice(0,q.lim);
+    return docs;
+  }
+  const notify=()=>listeners.forEach(l=>{try{l.fire()}catch(e){}});
+  function query(coll,base){
+    const q=base||{coll,wheres:[]};
+    return{
+      where:(f,op,v)=>query(coll,{...q,wheres:[...q.wheres,{f,v}]}),
+      orderBy:(f,dir)=>query(coll,{...q,ord:{f,dir:dir||'asc'}}),
+      limit:n=>query(coll,{...q,lim:n}),
+      startAfter:()=>query(coll,q),
+      get:async()=>snap(run(q)),
+      onSnapshot:(cb)=>{const l={fire:()=>cb(snap(run(q)))};listeners.push(l);l.fire();return()=>{const i=listeners.indexOf(l);if(i>-1)listeners.splice(i,1);};},
+      add:async(obj)=>{const id=genId();(store[coll]=store[coll]||{})[id]={...obj};notify();return{id};},
+      doc:(id)=>({
+        get:async()=>({exists:!!(store[coll]&&store[coll][id]),data:()=>({...(store[coll]||{})[id]})}),
+        set:async(obj,opts)=>{store[coll]=store[coll]||{};store[coll][id]=(opts&&opts.merge)?{...(store[coll][id]||{}),...obj}:{...obj};notify();},
+        update:async(obj)=>{if(store[coll]&&store[coll][id]){Object.assign(store[coll][id],obj);notify();}},
+        onSnapshot:(cb)=>{const l={fire:()=>{const d=(store[coll]||{})[id];cb({exists:!!d,id,data:()=>({...d})});}};listeners.push(l);l.fire();return()=>{};}
+      })
+    };
+  }
+  return{collection:c=>query(c),enablePersistence:()=>Promise.resolve()};
+}
+
+function getCfg(){
+  if(FIREBASE_CONFIG)return FIREBASE_CONFIG;
+  if(settings.fb)return settings.fb;
+  const raw=prompt('First-time setup: paste your Firebase config {...} block');
+  if(!raw)return null;
+  try{
+    const fixed=raw.replace(/^\s*const\s+firebaseConfig\s*=\s*/,'').replace(/;\s*$/,'')
+      .replace(/([{,]\s*)([A-Za-z0-9_]+)\s*:/g,'$1"$2":').replace(/'/g,'"');
+    settings.fb=JSON.parse(fixed);localStorage.setItem(LS,JSON.stringify(settings));return settings.fb;
+  }catch(e){alert('Config didn\'t parse. Reload and try again.');return null;}
+}
+
+function boot(){
+  if(TEST_MODE){
+    db=makeMockDb();
+    me={uid:'test-admin'};meDoc={name:'Test Admin',role:'admin'};
+    $('whoami').textContent='⚠ TEST MODE — no sign-in, data clears on refresh';
+    $('vSignin').style.display='none';$('vApp').style.display='block';$('mainNav').style.display='flex';
+    startTrips();startUsers();loadLogs(true);
+    return;
+  }
+  const cfg=getCfg();if(!cfg)return;
+  firebase.initializeApp(cfg);
+  db=firebase.firestore();
+  SV=()=>firebase.firestore.FieldValue.serverTimestamp();
+  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+  firebase.auth().onAuthStateChanged(async u=>{
+    me=u;
+    if(!u){$('vSignin').style.display='block';$('vApp').style.display='none';$('mainNav').style.display='none';return;}
+    const ud=await db.collection('tt_users').doc(u.uid).get();
+    meDoc=ud.exists?ud.data():null;
+    if(!meDoc||meDoc.role!=='admin'){
+      alert('This account is not an admin. Use the Field app instead.');
+      await firebase.auth().signOut();return;
+    }
+    $('whoami').textContent=(meDoc.name||u.email)+' · admin';
+    $('vSignin').style.display='none';$('vApp').style.display='block';$('mainNav').style.display='flex';
+    const s=await db.collection('tt_settings').doc('config').get();
+    if(s.exists&&s.data().geminiKey)$('setGemini').value=s.data().geminiKey;
+    startTrips();startUsers();loadLogs(true);
+  });
+}
+$('btnSignin').onclick=async()=>{
+  $('authErr').style.display='none';
+  try{await firebase.auth().signInWithEmailAndPassword($('inEmail').value.trim(),$('inPass').value);}
+  catch(e){$('authErr').textContent=e.message;$('authErr').style.display='block';}
+};
+$('eye1').onclick=()=>{const i=$('inPass');i.type=i.type==='password'?'text':'password';$('eye1').textContent=i.type==='password'?'👁':'🙈';};
+function authFail(m){$('authErr').textContent=m;$('authErr').style.display='block';}
+$('btnFirstTime').onclick=async()=>{
+  $('authErr').style.display='none';
+  const email=$('inEmail').value.trim(),pass=$('inPass').value;
+  if(!email){authFail('Type the admin email in the Email box above first.');return;}
+  if(pass.length<6){authFail('Type a password of at least 6 characters above first.');return;}
+  if(!firebase.apps.length||!db){authFail('Not connected to Firebase — reload the page and paste your config when asked.');return;}
+  $('btnFirstTime').disabled=true;$('btnFirstTime').textContent='Creating…';
+  try{
+    try{
+      const admins=await db.collection('tt_users').where('role','==','admin').limit(1).get();
+      if(!admins.empty){authFail('An admin already exists — sign in instead.');return;}
+    }catch(e){/* pre-check blocked before sign-in by rules — expected, continue */}
+    const cred=await firebase.auth().createUserWithEmailAndPassword(email,pass);
+    await db.collection('tt_users').doc(cred.user.uid).set({name:'Admin',email,role:'admin',active:true,createdAt:SV()});
+    await db.collection('tt_logs').add({ts:SV(),uid:cred.user.uid,by:'Admin',email,app:'admin',action:'admin.bootstrap',target:email,detail:'First admin account created'});
+    toast('Admin account created ✓');
+  }catch(e){
+    if(e.code==='auth/email-already-in-use')authFail('That email already has an account — just sign in with it above.');
+    else if(e.code==='auth/operation-not-allowed')authFail('Email/Password sign-in is OFF in Firebase. Console → Authentication → Sign-in method → enable Email/Password.');
+    else if(e.code==='auth/invalid-email')authFail('That email doesn\'t look valid — check for typos.');
+    else authFail(e.message||'Something failed — try again.');
+  }finally{$('btnFirstTime').disabled=false;$('btnFirstTime').textContent='First time? Create the admin account';}
+};
+$('btnOut').onclick=()=>{if(TEST_MODE){toast('Test mode — no sign-in to sign out of');return;}firebase.auth().signOut();};
+
+function log(action,target,detail){
+  db.collection('tt_logs').add({ts:SV(),uid:me.uid,by:meDoc.name||me.email,email:me.email,app:'admin',action,target:target||'',detail:detail||''}).catch(()=>{});
+}
+
+/* ============ nav ============ */
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');$('page-'+b.dataset.page).classList.add('on');
+});
+
+/* ============ trips home ============ */
+function startTrips(){
+  if(unsubTrips)unsubTrips();
+  unsubTrips=db.collection('tt_trips').orderBy('createdAt','desc').limit(60).onSnapshot(snap=>{
+    allTrips=[];snap.forEach(d=>allTrips.push({id:d.id,...d.data()}));
+    const on=$('ongoing');on.innerHTML='';
+    const doneL=$('doneList');doneL.innerHTML='';
+    const act=allTrips.filter(t=>t.status==='active'),don=allTrips.filter(t=>t.status!=='active');
+    if(!act.length)on.innerHTML='<div class="empty" style="grid-column:1/-1">No ongoing trips.</div>';
+    act.forEach(t=>{
+      const c=document.createElement('div');c.className='tcard';
+      c.innerHTML=`<div class="tk">#${esc(t.ticket)}</div><div class="who">🚚 ${esc(t.driver||'—')}<br>📦 ${esc(t.loader||'—')}</div>`;
+      c.onclick=()=>openTrip(t);on.appendChild(c);
+    });
+    if(!don.length)doneL.innerHTML='<div class="note">None yet.</div>';
+    don.forEach(t=>{
+      const d=document.createElement('div');d.className='item';
+      d.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span><span class="badge done">DONE</span></div><div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''}</div>`;
+      d.onclick=()=>openTrip(t);doneL.appendChild(d);
+    });
+  });
+}
+$('backHome').onclick=()=>{$('tripView').style.display='none';$('homeView').style.display='block';if(unsubDrops)unsubDrops();};
+$('backTrip').onclick=()=>{$('dropView').style.display='none';$('tripView').style.display='block';if(unsubPhotos)unsubPhotos();};
+
+function openTrip(t){
+  curTrip=t;
+  $('homeView').style.display='none';$('dropView').style.display='none';$('tripView').style.display='block';
+  $('tripHead').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+    <div><div class="st" style="margin:0">TICKET #${esc(t.ticket)}</div>
+    <div class="note">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div></div>
+    <button class="btn ghost small" id="btnTripDone">${t.status==='active'?'Mark done':'Reopen'}</button></div>`;
+  $('btnTripDone').onclick=async()=>{
+    const ns=t.status==='active'?'done':'active';
+    await db.collection('tt_trips').doc(t.id).update({status:ns});
+    log('trip.status','#'+t.ticket,'→ '+ns);curTrip.status=ns;openTrip(curTrip);
+  };
+  if(unsubDrops)unsubDrops();
+  unsubDrops=db.collection('tt_drops').where('tripId','==',t.id).onSnapshot(snap=>{
+    const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
+    drops.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    const list=$('dropsList');list.innerHTML='';
+    if(!drops.length){list.innerHTML='<div class="empty">No drops on this trip yet.</div>';return;}
+    drops.forEach((s,i)=>{
+      const cls=s.delStatus==='Delivered'?'d-delivered':s.delStatus==='Undelivered'?'d-undelivered':s.delStatus==='Partial'?'d-partial':'';
+      const div=document.createElement('div');div.className='item '+cls;
+      div.innerHTML=`<div class="t1"><span>Doc #: ${esc(s.doc||'—')}</span><span class="note">Drop ${i+1}</span></div>
+        <div class="t2">${esc(s.customer||'')}${s.delStatus?' · '+esc(s.delStatus):''}${s.collStatus&&s.collStatus!=='N/A'?' · '+esc(s.collStatus):''}</div>`;
+      div.onclick=()=>openDrop(s.id);list.appendChild(div);
+    });
+  });
+}
+
+/* ============ drop detail ============ */
+function openDrop(id){
+  curDrop=id;
+  $('tripView').style.display='none';$('dropView').style.display='block';
+  db.collection('tt_drops').doc(id).onSnapshot(d=>{
+    if(!d.exists)return;dropData={id:d.id,...d.data()};renderDrop();
+  });
+  if(unsubPhotos)unsubPhotos();
+  unsubPhotos=db.collection('tt_photos').where('dropId','==',id).onSnapshot(snap=>{
+    dropPhotos=[];snap.forEach(p=>dropPhotos.push({id:p.id,...p.data()}));
+    dropPhotos.sort((a,b)=>(a.ms||0)-(b.ms||0));renderPhotos();
+  });
+}
+function renderDrop(){
+  const s=dropData;
+  $('fTicket').textContent=s.ticket||'—';$('fDate').textContent=s.date||'—';
+  const set=(id,v)=>{const el=$(id);if(document.activeElement!==el)el.value=v??'';};
+  set('fSi',s.si);set('fDoc',s.doc);set('fAmt',s.amount);set('fCr',s.cr);set('fPayref',s.payref);
+  set('fCust',s.customer);set('fMop',s.mop);set('fPlate',s.plate);set('fLoc',s.location);
+  set('fDel',s.delStatus);set('fColl',s.collStatus||'N/A');set('fRem',s.remarks);
+  $('tArr').textContent=s.arrival||'—';$('tRec').textContent=s.received||'—';$('tDep').textContent=s.departure||'—';
+  $('slotPay').style.display=s.mop==='Online Payment'?'block':'none';
+}
+function renderPhotos(){
+  ['si','dr','payment','arrival','received','departure'].forEach(kind=>{
+    const box=$('ph-'+kind);if(!box)return;box.innerHTML='';
+    const ph=dropPhotos.filter(p=>p.kind===kind);
+    if(!ph.length){box.innerHTML='<span class="note">None</span>';return;}
+    ph.forEach(p=>{
+      const im=document.createElement('img');im.className='thumb';im.src=p.data;
+      im.onclick=()=>{$('modalImg').src=p.data;$('photoModal').classList.add('on');};
+      box.appendChild(im);
+    });
+  });
+}
+$('modalClose').onclick=()=>$('photoModal').classList.remove('on');
+$('photoModal').onclick=e=>{if(e.target.id==='photoModal')$('photoModal').classList.remove('on');};
+
+$('btnAdminSave').onclick=async()=>{
+  const f={si:$('fSi').value.trim(),doc:$('fDoc').value.trim(),amount:$('fAmt').value.trim(),
+    cr:$('fCr').value.trim(),payref:$('fPayref').value.trim(),customer:$('fCust').value.trim(),
+    mop:$('fMop').value,plate:$('fPlate').value.trim(),location:$('fLoc').value.trim(),
+    delStatus:$('fDel').value,collStatus:$('fColl').value,remarks:$('fRem').value.trim(),updatedAt:SV()};
+  if(f.delStatus==='Undelivered'&&!f.remarks){toast('Remarks required for Undelivered');return;}
+  // capture what changed for the log
+  const changed=Object.keys(f).filter(k=>k!=='updatedAt'&&String(dropData[k]??'')!==String(f[k]??''));
+  await db.collection('tt_drops').doc(curDrop).update(f);
+  log('drop.edit',(dropData.ticket||'')+'/'+(f.doc||curDrop),'Admin edit: '+(changed.join(', ')||'no changes'));
+  toast('Saved ✓');
+};
+
+/* ============ people ============ */
+$('btnEnroll').onclick=async()=>{
+  $('peopleErr').style.display='none';
+  const name=$('npName').value.trim(),email=$('npEmail').value.trim(),pass=$('npPass').value;
+  if(!name||!email||pass.length<6){toast('Fill name, email, and a 6+ char password');return;}
+  if(TEST_MODE){
+    await db.collection('tt_users').add({name,email,role:'field',active:true,createdAt:Date.now()});
+    log('user.enroll',email,'(test) Field account for '+name);
+    toast('(Test) account added — real accounts are created in live mode');
+    $('npName').value='';$('npEmail').value='';$('npPass').value='';return;
+  }
+  try{
+    // secondary app so the admin stays signed in
+    const sec=firebase.apps.find(a=>a.name==='Sec')||firebase.initializeApp(FIREBASE_CONFIG||settings.fb,'Sec');
+    const cred=await sec.auth().createUserWithEmailAndPassword(email,pass);
+    await db.collection('tt_users').doc(cred.user.uid).set({name,email,role:'field',active:true,createdAt:SV(),createdBy:me.uid});
+    await sec.auth().signOut();
+    log('user.enroll',email,'Field account for '+name);
+    toast('Account created — share the email & password with '+name);
+    $('npName').value='';$('npEmail').value='';$('npPass').value='';
+  }catch(e){$('peopleErr').textContent=e.message;$('peopleErr').style.display='block';}
+};
+function startUsers(){
+  if(unsubUsers)unsubUsers();
+  unsubUsers=db.collection('tt_users').onSnapshot(snap=>{
+    const list=$('usersList');list.innerHTML='';
+    snap.forEach(d=>{
+      const u=d.data();
+      const row=document.createElement('div');row.className='userrow';
+      row.innerHTML=`<span>${esc(u.name||u.email)} <span class="note">· ${esc(u.role)} · ${esc(u.email)}</span></span>
+        ${u.role!=='admin'?`<button class="btn ghost small">${u.active===false?'Enable':'Disable'}</button>`:''}`;
+      const btn=row.querySelector('button');
+      if(btn)btn.onclick=async()=>{
+        const na=u.active===false;
+        await db.collection('tt_users').doc(d.id).update({active:na});
+        log('user.'+(na?'enable':'disable'),u.email,'');
+      };
+      list.appendChild(row);
+    });
+  });
+}
+
+/* ============ history (read-only) ============ */
+async function loadLogs(reset){
+  let q=db.collection('tt_logs').orderBy('ts','desc').limit(40);
+  if(!reset&&logsCursor)q=q.startAfter(logsCursor);
+  const snap=await q.get();
+  if(reset)$('logsList').innerHTML='';
+  if(snap.empty&&reset){$('logsList').innerHTML='<div class="note">No actions yet.</div>';return;}
+  snap.forEach(d=>{
+    logsCursor=d;
+    const l=d.data();
+    const when=l.ts?((l.ts.toDate?l.ts.toDate():new Date(l.ts)).toLocaleString('en-PH',{timeZone:'Asia/Manila',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})):'…';
+    const row=document.createElement('div');row.className='logrow';
+    row.innerHTML=`<span class="who">${esc(l.by||l.email)}</span> · ${esc(l.action)} <b>${esc(l.target||'')}</b>
+      ${l.detail?'<br><span class="note">'+esc(l.detail)+'</span>':''}<br><span class="when">${when} · ${esc(l.app||'')}</span>`;
+    $('logsList').appendChild(row);
+  });
+}
+$('btnMoreLogs').onclick=()=>loadLogs(false);
+
+/* ============ settings ============ */
+$('btnSaveGemini').onclick=async()=>{
+  await db.collection('tt_settings').doc('config').set({geminiKey:$('setGemini').value.trim()},{merge:true});
+  log('settings.gemini','','Dr. Can key updated');
+  toast('Key saved — field devices get it on next sign-in');
+};
+
+/* ============ CSV export ============ */
+$('btnExportCsv').onclick=async()=>{
+  toast('Building CSV…');
+  const dropsSnap=await db.collection('tt_drops').get();
+  const drops=[];dropsSnap.forEach(d=>drops.push(d.data()));
+  const tmap={};allTrips.forEach(t=>tmap[t.id]=t);
+  // compute Drop # per trip by arrival order
+  const byTrip={};drops.forEach(s=>{(byTrip[s.tripId]=byTrip[s.tripId]||[]).push(s);});
+  Object.values(byTrip).forEach(arr=>arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0)).forEach((s,i)=>s._dropNo=i+1));
+  const rows=[['Trip Ticket #','Date','Drop #','S.I #','Doc #','Amount','C.R #','Payment Ref','Customer','Contact #','Arrival','Time Received','Departure','Del. Status','Coll Status','MOP','Plate #','Location','Remarks','Driver','Loader']];
+  drops.sort((a,b)=>(a.ticket||'').localeCompare(b.ticket||'')||(a._dropNo-b._dropNo)).forEach(s=>{
+    const t=tmap[s.tripId]||{};
+    rows.push([s.ticket,s.date,s._dropNo,s.si,s.doc,s.amount,s.cr,s.payref,s.customer,s.contact,s.arrival,s.received,s.departure,s.delStatus,s.collStatus,s.mop,s.plate,s.location,s.remarks,t.driver||'',t.loader||'']);
+  });
+  const csv=rows.map(r=>r.map(c=>{const x=String(c??'');return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='deliveries_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);
+  log('export.csv','',drops.length+' drops');
+  toast('CSV downloaded');
+};
+
+boot();
+</script>
+</body>
+</html>
