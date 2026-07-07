@@ -247,7 +247,7 @@ const TEST_MODE = false;
 
 const LS='ttf_settings';
 let settings=JSON.parse(localStorage.getItem(LS)||'{}');
-let db=null,me=null,meDoc=null,geminiKey='';
+let db=null,me=null,meDoc=null,geminiKey='',myVehicle=null;
 let curTrip=null,curDrop=null,unsubTrips=null,unsubDrops=null,unsubPhotos=null;
 let camPurpose=null; // {mode:'scan'|'cap', kind}
 let dropPhotos=[];
@@ -335,6 +335,10 @@ function boot(){
     if(meDoc.active===false){await firebase.auth().signOut();alert('Your account is disabled. Contact admin.');return;}
     $('whoami').textContent=(meDoc.name||u.email)+' · '+(meDoc.role||'field');
     try{const s=await db.collection('tt_settings').doc('config').get();geminiKey=s.exists?(s.data().geminiKey||''):'';}catch(e){}
+    try{const v=await db.collection('tt_settings').doc('vehicles').get();
+      const list=v.exists?(v.data().list||[]):[];
+      myVehicle=list.find(x=>x.driverUid===u.uid||x.loaderUid===u.uid)||null;
+    }catch(e){}
     startTrips();show('vTrips');
   });
 }
@@ -369,7 +373,9 @@ function startTrips(){
 }
 $('btnNewTrip').onclick=()=>{
   $('ntDate').value=phToday();
-  $('ntDriver').value=meDoc.name||'';
+  $('ntDriver').value=(myVehicle&&myVehicle.driverName)||meDoc.name||'';
+  $('ntLoader').value=(myVehicle&&myVehicle.loaderName)||'';
+  $('ntPlate').value=(myVehicle&&myVehicle.plate)||'';
   show('vNewTrip');
 };
 $('btnSaveTrip').onclick=async()=>{
