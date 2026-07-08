@@ -225,6 +225,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     <label>Gemini API key (shared with all field devices)</label>
     <input id="setGemini" type="password" placeholder="AIza...">
     <div class="gap"></div>
+    <label>Backup Gemini key (optional — used automatically when the first key hits its free limit)</label>
+    <input id="setGemini2" type="password" placeholder="AIza... from a second Google account, e.g. Joyce's">
+    <div class="gap"></div>
+    <label>Google Sheet webhook URL (from the Apps Script deploy — auto-lists every submitted drop + saves photos to Drive)</label>
+    <input id="setSheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="gap"></div>
     <button class="btn amber" id="btnSaveGemini">Save key</button>
     <div class="gap"></div>
     <div class="note">Free key from aistudio.google.com/apikey. Field devices fetch this after sign-in so the crew never handles keys.</div>
@@ -358,6 +364,8 @@ function boot(){
     $('vSignin').style.display='none';$('vApp').style.display='block';$('mainNav').style.display='flex';
     const s=await db.collection('tt_settings').doc('config').get();
     if(s.exists&&s.data().geminiKey)$('setGemini').value=s.data().geminiKey;
+    if(s.exists&&s.data().geminiKey2)$('setGemini2').value=s.data().geminiKey2;
+    if(s.exists&&s.data().sheetUrl)$('setSheetUrl').value=s.data().sheetUrl;
     startTrips();startUsers();startVehicles();loadLogs(true);
   });
 }
@@ -686,9 +694,9 @@ $('btnMoreLogs').onclick=()=>loadLogs(false);
 
 /* ============ settings ============ */
 $('btnSaveGemini').onclick=async()=>{
-  await db.collection('tt_settings').doc('config').set({geminiKey:$('setGemini').value.trim()},{merge:true});
-  log('settings.gemini','','Dr. Can key updated');
-  toast('Key saved — field devices get it on next sign-in');
+  await db.collection('tt_settings').doc('config').set({geminiKey:$('setGemini').value.trim(),geminiKey2:$('setGemini2').value.trim(),sheetUrl:$('setSheetUrl').value.trim()},{merge:true});
+  log('settings.gemini','','Dr. Can key(s) updated');
+  toast('Saved — field devices get it on next sign-in');
 };
 
 /* ============ CSV export ============ */
