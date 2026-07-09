@@ -141,7 +141,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div class="st">DOCUMENTS</div>
       <div class="slot"><div class="head"><span class="name">Sales Invoice</span></div><div class="thumbs" id="ph-si"><span class="note">None</span></div></div>
       <div class="slot"><div class="head"><span class="name">Delivery Receipt</span></div><div class="thumbs" id="ph-dr"><span class="note">None</span></div></div>
-      <div class="slot" id="slotPay" style="display:none"><div class="head"><span class="name">Payment proof</span></div><div class="thumbs" id="ph-payment"></div></div>
+      <div class="slot" id="slotPay" style="display:none"><div class="head"><span class="name">Proof of Payment</span></div><div class="thumbs" id="ph-payment"></div></div>
     </div>
     <div class="card">
       <div class="st">TIMELINE</div>
@@ -162,7 +162,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
         <div class="full"><label>Customer</label><input id="fCust"></div>
         <div class="full"><label>Contact # <span class="note">(kept out of the Viber copy)</span></label><input id="fContact" inputmode="tel"></div>
         <div><label>MOP</label>
-          <select id="fMop"><option></option><option>COD</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select></div>
+          <select id="fMop"><option></option><option>COD</option><option>Check</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select></div>
         <div><label>Plate #</label><input id="fPlate"></div>
         <div class="full"><label>Location</label><input id="fLoc"></div>
         <div><label>Del. Status</label>
@@ -494,7 +494,7 @@ function openTrip(t){
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',t.id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
-    drops.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    drops.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
     const list=$('dropsList');list.innerHTML='';
     if(!drops.length){list.innerHTML='<div class="empty">No drops on this trip yet.</div>';return;}
     drops.forEach((s,i)=>{
@@ -565,7 +565,7 @@ async function buildDetails(s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
     const i=arr.findIndex(x=>x.id===(s.id||curDrop));if(i>-1)dropNo=i+1;
   }catch(e){}
   return 'Trip Ticket #: '+(s.ticket||'')+
@@ -749,7 +749,7 @@ $('btnExportCsv').onclick=async()=>{
   const tmap={};allTrips.forEach(t=>tmap[t.id]=t);
   // compute Drop # per trip by arrival order
   const byTrip={};drops.forEach(s=>{(byTrip[s.tripId]=byTrip[s.tripId]||[]).push(s);});
-  Object.values(byTrip).forEach(arr=>arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0)).forEach((s,i)=>s._dropNo=i+1));
+  Object.values(byTrip).forEach(arr=>arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0)).forEach((s,i)=>s._dropNo=i+1));
   const rows=[['Trip Ticket #','Date','Drop #','S.I #','Doc #','Amount','C.R #','Payment Ref','Customer','Contact #','Arrival','Time Received','Departure','Del. Status','Coll Status','MOP','Plate #','Location','Remarks','Driver','Loader']];
   drops.sort((a,b)=>(a.ticket||'').localeCompare(b.ticket||'')||(a._dropNo-b._dropNo)).forEach(s=>{
     const t=tmap[s.tripId]||{};
