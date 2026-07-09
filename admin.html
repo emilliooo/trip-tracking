@@ -47,6 +47,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .badge{border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600}
 .badge.active{background:rgba(255,176,32,.15);color:var(--amber)}
 .badge.done{background:rgba(61,214,140,.15);color:var(--ok)}
+.badge.bad{background:rgba(255,107,107,.15);color:var(--bad)}
+.badge.sub{background:rgba(255,209,102,.15);color:#FFD166}
 .tripcards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}
 .tcard .tk{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px}
@@ -120,6 +122,9 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     <div class="st">ONGOING TRIPS</div>
     <div class="tripcards" id="ongoing"></div>
     <div class="gap"></div><div class="gap"></div>
+    <div class="st">FOR REVIEW — submitted by field</div>
+    <div id="reviewList"></div>
+    <div class="gap"></div><div class="gap"></div>
     <div class="st">COMPLETED</div>
     <div id="doneList"></div>
   </div>
@@ -155,6 +160,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
         <div><label>C.R #</label><input id="fCr"></div>
         <div class="full"><label>Payment Ref</label><input id="fPayref"></div>
         <div class="full"><label>Customer</label><input id="fCust"></div>
+        <div class="full"><label>Contact # <span class="note">(kept out of the Viber copy)</span></label><input id="fContact" inputmode="tel"></div>
         <div><label>MOP</label>
           <select id="fMop"><option></option><option>COD</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select></div>
         <div><label>Plate #</label><input id="fPlate"></div>
@@ -413,23 +419,41 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 });
 
 /* ============ trips home ============ */
+const isOngoing=t=>['active','incomplete'].includes(t.status||'active');
+function tripBadge(t){
+  const st=t.status||'active';
+  if(st==='active')return '<span class="badge active">ACTIVE</span>';
+  if(st==='incomplete')return '<span class="badge bad">INCOMPLETE</span>';
+  if(st==='submitted')return '<span class="badge sub">FOR REVIEW</span>';
+  return '<span class="badge done">COMPLETED</span>';
+}
 function startTrips(){
   if(unsubTrips)unsubTrips();
-  unsubTrips=db.collection('tt_trips').orderBy('createdAt','desc').limit(60).onSnapshot(snap=>{
+  unsubTrips=db.collection('tt_trips').orderBy('createdAt','desc').limit(80).onSnapshot(snap=>{
     allTrips=[];snap.forEach(d=>allTrips.push({id:d.id,...d.data()}));
     const on=$('ongoing');on.innerHTML='';
+    const rev=$('reviewList');rev.innerHTML='';
     const doneL=$('doneList');doneL.innerHTML='';
-    const act=allTrips.filter(t=>t.status==='active'),don=allTrips.filter(t=>t.status!=='active');
+    const act=allTrips.filter(isOngoing);
+    const sub=allTrips.filter(t=>t.status==='submitted');
+    const don=allTrips.filter(t=>['completed','done'].includes(t.status));
     if(!act.length)on.innerHTML='<div class="empty" style="grid-column:1/-1">No ongoing trips.</div>';
     act.forEach(t=>{
       const c=document.createElement('div');c.className='tcard';
-      c.innerHTML=`<div class="tk">#${esc(t.ticket)}</div><div class="who">🚚 ${esc(t.driver||'—')}<br>📦 ${esc(t.loader||'—')}</div>`;
+      if(t.status==='incomplete')c.style.border='1px solid var(--bad)';
+      c.innerHTML=`<div class="tk">#${esc(t.ticket)}</div><div class="who">🚚 ${esc(t.driver||'—')}<br>📦 ${esc(t.loader||'—')}</div>${t.status==='incomplete'?'<div class="who" style="color:var(--bad)">⚠ sent back</div>':''}`;
       c.onclick=()=>openTrip(t);on.appendChild(c);
+    });
+    if(!sub.length)rev.innerHTML='<div class="note">Nothing waiting for review.</div>';
+    sub.forEach(t=>{
+      const d=document.createElement('div');d.className='item';
+      d.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span>${tripBadge(t)}</div><div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''}</div>`;
+      d.onclick=()=>openTrip(t);rev.appendChild(d);
     });
     if(!don.length)doneL.innerHTML='<div class="note">None yet.</div>';
     don.forEach(t=>{
       const d=document.createElement('div');d.className='item';
-      d.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span><span class="badge done">DONE</span></div><div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''}</div>`;
+      d.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span><span class="badge done">COMPLETED</span></div><div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''}</div>`;
       d.onclick=()=>openTrip(t);doneL.appendChild(d);
     });
   });
@@ -440,15 +464,33 @@ $('backTrip').onclick=()=>{$('dropView').style.display='none';$('tripView').styl
 function openTrip(t){
   curTrip=t;
   $('homeView').style.display='none';$('dropView').style.display='none';$('tripView').style.display='block';
-  $('tripHead').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
-    <div><div class="st" style="margin:0">TICKET #${esc(t.ticket)}</div>
-    <div class="note">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div></div>
-    <button class="btn ghost small" id="btnTripDone">${t.status==='active'?'Mark done':'Reopen'}</button></div>`;
-  $('btnTripDone').onclick=async()=>{
-    const ns=t.status==='active'?'done':'active';
-    await db.collection('tt_trips').doc(t.id).update({status:ns});
-    log('trip.status','#'+t.ticket,'→ '+ns);curTrip.status=ns;openTrip(curTrip);
+  const st=t.status||'active';
+  let btns='';
+  if(st==='submitted')btns='<button class="btn ghost small" id="btnReviewOk" style="border-color:rgba(61,214,140,.5);color:var(--ok)">✓ Completed</button> <button class="btn ghost small" id="btnReviewBad" style="border-color:rgba(255,107,107,.5);color:var(--bad)">✗ Incomplete</button>';
+  else if(st==='completed'||st==='done')btns='<button class="btn ghost small" id="btnReopen">Reopen</button>';
+  else btns='<button class="btn ghost small" id="btnForceDone">Mark completed</button>';
+  $('tripHead').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <div><div class="st" style="margin:0">TICKET #${esc(t.ticket)} ${tripBadge(t)}</div>
+    <div class="note">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div>
+    ${t.adminNotes?'<div class="note" style="color:var(--bad);margin-top:6px">⚠ Notes: '+esc(t.adminNotes)+'</div>':''}</div>
+    <div>${btns}</div></div>`;
+  const setStatus=async(ns,notes)=>{
+    const u={status:ns};u.adminNotes=notes!==undefined?notes:(t.adminNotes||'');
+    await db.collection('tt_trips').doc(t.id).update(u);
+    log('trip.review','#'+t.ticket,ns+(notes?' — '+notes:''));
+    curTrip={...t,...u};openTrip(curTrip);
+    toast(ns==='incomplete'?'Sent back to field with notes':'Marked '+ns);
   };
+  const q=id=>document.getElementById(id);
+  if(q('btnReviewOk'))q('btnReviewOk').onclick=()=>{if(confirm('Mark trip #'+t.ticket+' as Completed?'))setStatus('completed','');};
+  if(q('btnReviewBad'))q('btnReviewBad').onclick=()=>{
+    const notes=prompt('What is missing or wrong? (the field crew will see this)');
+    if(notes===null)return;
+    if(!notes.trim()){toast('Notes are required for Incomplete');return;}
+    setStatus('incomplete',notes.trim());
+  };
+  if(q('btnReopen'))q('btnReopen').onclick=()=>{if(confirm('Reopen trip #'+t.ticket+'?'))setStatus('active','');};
+  if(q('btnForceDone'))q('btnForceDone').onclick=()=>{if(confirm('Mark trip #'+t.ticket+' as Completed?'))setStatus('completed','');};
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',t.id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
@@ -483,7 +525,7 @@ function renderDrop(){
   $('fTicket').textContent=s.ticket||'—';$('fDate').textContent=s.date||'—';
   const set=(id,v)=>{const el=$(id);if(document.activeElement!==el)el.value=v??'';};
   set('fSi',s.si);set('fDoc',s.doc);set('fAmt',s.amount);set('fCr',s.cr);set('fPayref',s.payref);
-  set('fCust',s.customer);set('fMop',s.mop);set('fPlate',s.plate);set('fLoc',s.location);
+  set('fCust',s.customer);set('fContact',s.contact);set('fMop',s.mop);set('fPlate',s.plate);set('fLoc',s.location);
   set('fDel',s.delStatus);set('fColl',s.collStatus||'N/A');set('fRem',s.remarks);
   $('tArr').textContent=s.arrival||'—';$('tRec').textContent=s.received||'—';$('tDep').textContent=s.departure||'—';
   $('slotPay').style.display=s.mop==='Online Payment'?'block':'none';
@@ -562,7 +604,7 @@ $('btnDetShare').onclick=async()=>{
 
 $('btnAdminSave').onclick=async()=>{
   const f={si:$('fSi').value.trim(),doc:$('fDoc').value.trim(),amount:$('fAmt').value.trim(),
-    cr:$('fCr').value.trim(),payref:$('fPayref').value.trim(),customer:$('fCust').value.trim(),
+    cr:$('fCr').value.trim(),payref:$('fPayref').value.trim(),customer:$('fCust').value.trim(),contact:$('fContact').value.trim(),
     mop:$('fMop').value,plate:$('fPlate').value.trim(),location:$('fLoc').value.trim(),
     delStatus:$('fDel').value,collStatus:$('fColl').value,remarks:$('fRem').value.trim(),updatedAt:SV()};
   if(f.delStatus==='Undelivered'&&!f.remarks){toast('Remarks required for Undelivered');return;}
