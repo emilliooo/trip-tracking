@@ -44,6 +44,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .badge{border-radius:999px;padding:3px 10px;font-size:11px;font-weight:600}
 .badge.active{background:rgba(255,176,32,.15);color:var(--amber)}
 .badge.done{background:rgba(61,214,140,.15);color:var(--ok)}
+.badge.bad{background:rgba(255,107,107,.15);color:var(--bad)}
+.badge.sub{background:rgba(255,209,102,.15);color:#FFD166}
+.tabbar{display:flex;gap:8px;margin-bottom:13px}
+.tabbar button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:10px;font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15px;letter-spacing:.7px;cursor:pointer}
+.tabbar button.on{background:var(--amber);border-color:var(--amber);color:#12100A}
 .item{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px;margin-bottom:10px;cursor:pointer}
 .item .t1{font-weight:600;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 .item .t2{color:var(--muted);font-size:12px;margin-top:3px}
@@ -107,7 +112,15 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 <!-- TRIPS -->
 <div id="vTrips" style="display:none">
   <div id="userBar"><span id="whoami"></span><button id="btnOut">Sign out</button></div>
+  <div class="row" style="margin-bottom:12px">
+    <button class="btn ghost small seg on" id="segOngoing" style="flex:1">Ongoing</button>
+    <button class="btn ghost small seg" id="segDone" style="flex:1">Completed</button>
+  </div>
   <button class="btn amber" id="btnNewTrip" style="margin-bottom:13px">+ New trip ticket</button>
+  <div class="tabbar">
+    <button id="tabOngoing" class="on">ONGOING</button>
+    <button id="tabDone">COMPLETED</button>
+  </div>
   <div id="tripsList"><div class="empty">Loading…</div></div>
 </div>
 
@@ -116,6 +129,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
   <button class="back" data-back="trips">‹ Trips</button>
   <div class="card">
     <div class="st">NEW TRIP TICKET</div>
+    <button class="btn ghost" id="btnScanTicket" style="margin-bottom:12px">📷 Scan trip ticket (auto-fill)</button>
+    <div class="note" id="scanTicketNote" style="display:none;margin-bottom:10px">✓ Photo captured — it will attach when you save. You can also type/fix the fields below.</div>
     <div class="grid2">
       <div><label>Trip Ticket #</label><input id="ntTicket"></div>
       <div><label>Date</label><input id="ntDate" type="date"></div>
@@ -132,8 +147,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 <div id="vTrip" style="display:none">
   <button class="back" data-back="trips">‹ Trips</button>
   <div class="card" id="tripHead"></div>
+  <div class="card"><div class="slot" style="margin:0">
+    <div class="head"><span class="name">Trip Ticket photo</span><button class="btn ghost small" id="btnTicketPhoto">📷 Add</button></div>
+    <div class="thumbs" id="ph-ticket"></div>
+  </div></div>
   <button class="btn amber" id="btnNewDrop" style="margin-bottom:13px">📷 New drop — scan Delivery Receipt</button>
   <div id="dropsList"></div>
+  <div class="gap"></div>
+  <button class="btn ok" id="btnFinishTrip">✓ Finish & submit trip ticket</button>
 </div>
 
 <!-- DROP DETAIL -->
@@ -191,6 +212,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div><label>C.R #</label><input id="fCr"></div>
       <div class="full"><label>Payment Ref</label><input id="fPayref"></div>
       <div class="full"><label>Customer</label><input id="fCust"></div>
+      <div class="full"><label>Contact # <span class="note">(kept out of the Viber copy)</span></label><input id="fContact" inputmode="tel"></div>
       <div><label>MOP</label>
         <select id="fMop"><option></option><option>COD</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select>
       </div>
@@ -251,6 +273,7 @@ let settings=JSON.parse(localStorage.getItem(LS)||'{}');
 let db=null,me=null,meDoc=null,geminiKey='',geminiKey2='',sheetUrl='',myVehicle=null;
 let curTrip=null,curDrop=null,unsubTrips=null,unsubDrops=null,unsubPhotos=null;
 let camPurpose=null; // {mode:'scan'|'cap', kind}
+let tripsCache=[],tripTab='ongoing',pendingTicketPhoto=null,unsubTripDoc=null,unsubTicketPhotos=null,tripPhotos=[];
 let dropPhotos=[];
 
 const $=id=>document.getElementById(id);
@@ -297,7 +320,7 @@ function makeMockDb(){
 /* ============ views ============ */
 function show(v){['vSignin','vTrips','vNewTrip','vTrip','vDrop'].forEach(x=>$(x).style.display=x===v?'block':'none');}
 document.querySelectorAll('.back').forEach(b=>b.onclick=()=>{
-  if(b.dataset.back==='trips'){if(unsubDrops)unsubDrops();show('vTrips');}
+  if(b.dataset.back==='trips'){if(unsubDrops)unsubDrops();if(unsubTripDoc)unsubTripDoc();if(unsubTicketPhotos)unsubTicketPhotos();show('vTrips');}
   else if(b.dataset.back==='trip'){if(unsubPhotos)unsubPhotos();curDrop=null;show('vTrip');}
 });
 
@@ -357,21 +380,36 @@ function log(action,target,detail){
 }
 
 /* ============ trips ============ */
+const isOngoing=t=>['active','incomplete'].includes(t.status||'active');
+function tripBadge(t){
+  const st=t.status||'active';
+  if(st==='active')return '<span class="badge active">ACTIVE</span>';
+  if(st==='incomplete')return '<span class="badge bad">INCOMPLETE</span>';
+  if(st==='submitted')return '<span class="badge sub">WITH ADMIN</span>';
+  return '<span class="badge done">COMPLETED</span>';
+}
 function startTrips(){
   if(unsubTrips)unsubTrips();
-  unsubTrips=db.collection('tt_trips').orderBy('createdAt','desc').limit(30).onSnapshot(snap=>{
-    const list=$('tripsList');list.innerHTML='';
-    if(snap.empty){list.innerHTML='<div class="empty">No trips yet.<br>Tap “New trip ticket”.</div>';return;}
-    snap.forEach(d=>{
-      const t=d.data();
-      const div=document.createElement('div');div.className='item';
-      div.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span><span class="badge ${t.status==='active'?'active':'done'}">${t.status==='active'?'ACTIVE':'DONE'}</span></div>
-        <div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div>`;
-      div.onclick=()=>openTrip(d.id,t);
-      list.appendChild(div);
-    });
+  unsubTrips=db.collection('tt_trips').orderBy('createdAt','desc').limit(50).onSnapshot(snap=>{
+    tripsCache=[];snap.forEach(d=>tripsCache.push({id:d.id,...d.data()}));
+    renderTrips();
   });
 }
+function renderTrips(){
+  const list=$('tripsList');list.innerHTML='';
+  const arr=tripsCache.filter(t=>tripTab==='ongoing'?isOngoing(t):!isOngoing(t));
+  if(!arr.length){list.innerHTML='<div class="empty">'+(tripTab==='ongoing'?'No ongoing trips.<br>Tap “New trip ticket”.':'Nothing completed yet.')+'</div>';return;}
+  arr.forEach(t=>{
+    const div=document.createElement('div');div.className='item'+(t.status==='incomplete'?' d-undelivered':'');
+    div.innerHTML=`<div class="t1"><span>#${esc(t.ticket)}</span>${tripBadge(t)}</div>
+      <div class="t2">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div>
+      ${t.status==='incomplete'&&t.adminNotes?'<div class="t2" style="color:var(--bad)">⚠ Admin: '+esc(t.adminNotes)+'</div>':''}`;
+    div.onclick=()=>openTrip(t.id,t);
+    list.appendChild(div);
+  });
+}
+$('tabOngoing').onclick=()=>{tripTab='ongoing';$('tabOngoing').classList.add('on');$('tabDone').classList.remove('on');renderTrips();};
+$('tabDone').onclick=()=>{tripTab='done';$('tabDone').classList.add('on');$('tabOngoing').classList.remove('on');renderTrips();};
 $('btnNewTrip').onclick=()=>{
   $('ntDate').value=phToday();
   $('ntDriver').value=(myVehicle&&myVehicle.driverName)||meDoc.name||'';
@@ -384,14 +422,23 @@ $('btnSaveTrip').onclick=async()=>{
   if(!ticket){toast('Trip Ticket # is required');return;}
   const doc={ticket,date:$('ntDate').value,driver:$('ntDriver').value.trim(),loader:$('ntLoader').value.trim(),plate:$('ntPlate').value.trim(),status:'active',createdBy:me.uid,createdAt:SV()};
   const ref=await db.collection('tt_trips').add(doc);
+  if(pendingTicketPhoto){await addPhoto(ref.id,'ticket',pendingTicketPhoto);pendingTicketPhoto=null;$('scanTicketNote').style.display='none';}
   log('trip.create',ticket,'Driver '+doc.driver+(doc.loader?' & '+doc.loader:''));
   toast('Trip saved');openTrip(ref.id,doc);
 };
 
 function openTrip(id,t){
   curTrip={id,...t};
-  $('tripHead').innerHTML=`<div class="st" style="margin:0">TICKET #${esc(t.ticket)}</div>
-    <div class="note">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div>`;
+  if(unsubTripDoc)unsubTripDoc();
+  unsubTripDoc=db.collection('tt_trips').doc(id).onSnapshot(d=>{
+    if(!d.exists)return;curTrip={id:d.id,...d.data()};renderTripHead();renderTicketPhotos();
+  });
+  renderTripHead();
+  if(unsubTicketPhotos)unsubTicketPhotos();
+  unsubTicketPhotos=db.collection('tt_photos').where('dropId','==',id).onSnapshot(snap=>{
+    tripPhotos=[];snap.forEach(p=>{const d=p.data();if(d.kind==='ticket')tripPhotos.push({id:p.id,...d});});
+    tripPhotos.sort((a,b)=>(a.ms||0)-(b.ms||0));renderTicketPhotos();
+  });
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
@@ -401,7 +448,7 @@ function openTrip(id,t){
     drops.forEach((s,i)=>{
       const cls=s.delStatus==='Delivered'?'d-delivered':s.delStatus==='Undelivered'?'d-undelivered':s.delStatus==='Partial'?'d-partial':'';
       const div=document.createElement('div');div.className='item '+cls;
-      div.innerHTML=`<div class="t1"><span>Doc #: ${esc(s.doc||'—')}</span><span class="note">Drop ${i+1}</span></div>
+      div.innerHTML=`<div class="t1"><span>Doc #: ${esc(s.doc||'—')}</span><span class="note">Drop ${i+1}${s.status==='submitted'?' ✓':''}</span></div>
         <div class="t2">${esc(s.customer||'')}${s.delStatus?' · '+esc(s.delStatus):''}</div>`;
       div.onclick=()=>openDrop(s.id);
       list.appendChild(div);
@@ -409,6 +456,59 @@ function openTrip(id,t){
   });
   show('vTrip');
 }
+function renderTripHead(){
+  const t=curTrip;if(!t)return;
+  const ongoing=isOngoing(t);
+  $('tripHead').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+    <div class="st" style="margin:0">TICKET #${esc(t.ticket)}</div>${tripBadge(t)}</div>
+    <div class="note">${esc(t.date||'')} · ${esc(t.driver||'')}${t.loader?' & '+esc(t.loader):''} · ${esc(t.plate||'')}</div>
+    ${t.status==='incomplete'&&t.adminNotes?'<div class="note" style="color:var(--bad);margin-top:7px">⚠ Admin notes: '+esc(t.adminNotes)+'</div>':''}
+    ${t.status==='submitted'?'<div class="note" style="margin-top:7px">Waiting for admin review.</div>':''}`;
+  $('btnNewDrop').style.display=ongoing?'flex':'none';
+  $('btnFinishTrip').style.display=ongoing?'flex':'none';
+  $('btnTicketPhoto').style.display=ongoing?'inline-flex':'none';
+}
+function renderTicketPhotos(){
+  const box=$('ph-ticket');if(!box)return;box.innerHTML='';
+  if(!tripPhotos.length){box.innerHTML='<span class="note">None yet — add the printed ticket anytime.</span>';return;}
+  const locked=!isOngoing(curTrip||{});
+  tripPhotos.forEach(p=>{
+    const w=document.createElement('div');w.className='thumbwrap';
+    const im=document.createElement('img');im.className='thumb';im.src=p.data;
+    im.onclick=()=>{$('modalImg').src=p.data;$('photoModal').classList.add('on');};
+    w.appendChild(im);
+    const sv=document.createElement('button');sv.className='thumbsave';sv.textContent='💾';
+    sv.onclick=ev=>{ev.stopPropagation();savePhotoToDevice(p);};
+    w.appendChild(sv);
+    if(!locked){
+      const del=document.createElement('button');del.className='thumbdel';del.textContent='✕';
+      del.onclick=async ev=>{ev.stopPropagation();
+        if(!confirm('Remove this ticket photo?'))return;
+        await db.collection('tt_photos').doc(p.id).delete();
+        log('photo.delete','#'+(curTrip?curTrip.ticket:''),'ticket photo');toast('Photo removed');};
+      w.appendChild(del);
+    }
+    box.appendChild(w);
+  });
+}
+$('btnTicketPhoto').onclick=()=>{
+  if(tripPhotos.length>=2){toast('Photo limit reached (2)');return;}
+  camPurpose={mode:'ticketphoto'};$('camFile').click();
+};
+$('btnScanTicket').onclick=()=>{camPurpose={mode:'scanticket'};$('camFile').click();};
+$('btnFinishTrip').onclick=async()=>{
+  if(!curTrip)return;
+  const snap=await db.collection('tt_drops').where('tripId','==',curTrip.id).get();
+  let total=0;const pending=[];
+  snap.forEach(d=>{total++;const x=d.data();if(x.status!=='submitted')pending.push(x.doc||x.customer||'a drop');});
+  if(!total){toast('No drops on this trip yet');return;}
+  if(pending.length){toast('Submit every drop first — still open: '+pending.slice(0,3).join(', ')+(pending.length>3?'…':''));return;}
+  if(!confirm('Submit trip ticket #'+curTrip.ticket+' to admin? Editing will be locked.'))return;
+  await db.collection('tt_trips').doc(curTrip.id).update({status:'submitted',submittedAt:SV(),adminNotes:''});
+  log('trip.finish','#'+curTrip.ticket,total+' drops — submitted to admin');
+  toast('Trip ticket submitted ✓');
+  show('vTrips');
+};
 
 /* ============ drop create (scan D.R) ============ */
 $('btnNewDrop').onclick=()=>{camPurpose={mode:'newdrop'};$('camFile').click();};
@@ -452,7 +552,7 @@ function renderDrop(){
   $('fTicket').textContent=s.ticket||'—';$('fDate').textContent=s.date||'—';
   const set=(id,v)=>{const el=$(id);if(document.activeElement!==el)el.value=v??'';};
   set('fSi',s.si);set('fDoc',s.doc);set('fAmt',s.amount);set('fCr',s.cr);set('fPayref',s.payref);
-  set('fCust',s.customer);set('fMop',s.mop);set('fPlate',s.plate);set('fLoc',s.location);
+  set('fCust',s.customer);set('fContact',s.contact);set('fMop',s.mop);set('fPlate',s.plate);set('fLoc',s.location);
   set('fDel',s.delStatus);set('fColl',s.collStatus||'N/A');set('fRem',s.remarks);
   $('tArr').textContent=s.arrival||'—';$('tRec').textContent=s.received||'—';$('tDep').textContent=s.departure||'—';
   $('slotPay').style.display=(s.mop==='Online Payment'||$('fMop').value==='Online Payment')?'block':'none';
@@ -523,6 +623,27 @@ $('camFile').onchange=e=>{
 async function routePhoto(data){
   const p=camPurpose;camPurpose=null;if(!p)return;
   if(p.mode==='newdrop'){createDropFromDR(data);return;}
+  if(p.mode==='scanticket'){
+    pendingTicketPhoto=data;
+    $('scanTicketNote').style.display='block';
+    runScan(async()=>{
+      const ex=await gemini(data,'This is a trucking trip ticket. Extract ONLY if clearly visible: "Trip Ticket #" = the trip ticket number, "Plate #" = the vehicle plate number, "Date" = the date in YYYY-MM-DD.');
+      const f=ex.fields||{};
+      if(f['Trip Ticket #']&&!$('ntTicket').value)$('ntTicket').value=f['Trip Ticket #'];
+      if(f['Plate #']&&!$('ntPlate').value)$('ntPlate').value=f['Plate #'];
+      if(f['Date']&&/^\d{4}-\d{2}-\d{2}$/.test(f['Date']))$('ntDate').value=f['Date'];
+      toast('Ticket read ✓');
+    },'Trip ticket scan');
+    return;
+  }
+  if(p.mode==='ticketphoto'){
+    if(curTrip){
+      await addPhoto(curTrip.id,'ticket',data);
+      log('trip.photo','#'+curTrip.ticket,'ticket photo added');
+      toast('Ticket photo added');
+    }
+    return;
+  }
   if(!curDrop)return;
   const caps={departure:($('fDel').value==='Undelivered')?2:4,payment:2,arrival:2,received:2,si:2,dr:2};
   const have=dropPhotos.filter(x=>x.kind===p.kind).length;
@@ -542,12 +663,13 @@ async function routePhoto(data){
   const dropId=curDrop, ticketRef=(dropData.ticket||'')+'/'+(dropData.doc||curDrop);
   if(p.kind==='si'){
     runScan(async()=>{
-      const ex=await gemini(data,'This is a Sales Invoice (S.I). Extract ONLY these 5 fields with EXACT labels: "S.I #" = the Invoice No., "Amount" = the Total Amount, "Customer" = the Sold to name, "MOP" = the Term (map to one of: COD, Online Payment, Credit Card, PDC 30 Days, PDC 60 Days, 30 Days, 60 Days, N/A — e.g. Cash means COD), "Address" = ONLY the city or province.');
+      const ex=await gemini(data,'This is a Sales Invoice (S.I). Extract ONLY these 5 fields with EXACT labels: "S.I #" = the Invoice No., "Amount" = the Total Amount, "Customer" = the Sold to name, "MOP" = the Term (map to one of: COD, Online Payment, Credit Card, PDC 30 Days, PDC 60 Days, 30 Days, 60 Days, N/A — e.g. Cash means COD), "Address" = ONLY the city or province, "Contact #" = the customer phone number ONLY if clearly visible (+639 format).');
       const f=ex.fields||{};const u={updatedAt:SV()};
       const cur=(await db.collection('tt_drops').doc(dropId).get()).data()||{};
       if(f['S.I #'])u.si=f['S.I #'];if(f['Amount'])u.amount=f['Amount'];
       if(f['Customer']&&!cur.customer)u.customer=f['Customer'];
       if(f['MOP']&&!cur.mop)u.mop=f['MOP'];if(f['Address']&&!cur.location)u.location=f['Address'];
+      if(f['Contact #']&&!cur.contact)u.contact=f['Contact #'];
       await db.collection('tt_drops').doc(dropId).update(u);
       log('drop.autofill',ticketRef,'From S.I: '+Object.keys(f).join(', '));
       toast('S.I read ✓');
@@ -654,7 +776,7 @@ async function sendSheetRow(id,s,attempt){
 /* ============ save / submit ============ */
 function collectForm(){
   return {si:$('fSi').value.trim(),doc:$('fDoc').value.trim(),amount:$('fAmt').value.trim(),
-    cr:$('fCr').value.trim(),payref:$('fPayref').value.trim(),customer:$('fCust').value.trim(),
+    cr:$('fCr').value.trim(),payref:$('fPayref').value.trim(),customer:$('fCust').value.trim(),contact:$('fContact').value.trim(),
     mop:$('fMop').value,plate:$('fPlate').value.trim(),location:$('fLoc').value.trim(),
     delStatus:$('fDel').value,collStatus:$('fColl').value,remarks:$('fRem').value.trim(),updatedAt:SV()};
 }
