@@ -85,6 +85,20 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .thumbwrap{position:relative;display:inline-block}
 .thumbdel{position:absolute;top:-7px;right:-7px;background:var(--bad);color:#fff;border:none;border-radius:999px;width:21px;height:21px;font-size:11px;cursor:pointer;line-height:1;font-weight:700}
 .thumbsave{position:absolute;bottom:-7px;right:-7px;background:var(--amber);color:#12100A;border:none;border-radius:999px;width:21px;height:21px;font-size:11px;cursor:pointer;line-height:1}
+
+/* ---- crop & enhance editor ---- */
+#cropModal{position:fixed;inset:0;background:rgba(4,10,18,.96);display:none;z-index:80;flex-direction:column;padding:14px;gap:10px}
+#cropModal.on{display:flex}
+#cropWrap{flex:1;display:grid;place-items:center;min-height:0}
+#cropCv{max-width:100%;max-height:100%;touch-action:none;border-radius:10px}
+#cropBar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+#cropBar .fchip{background:#1D3049;border:1px solid #26405F;color:#8DA2BC;border-radius:999px;padding:8px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+#cropBar .fchip.on{background:#FFB020;border-color:#FFB020;color:#12100A;font-weight:600}
+#cropActions{display:flex;gap:9px}
+#cropActions button{flex:1;border:none;border-radius:11px;padding:13px;font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+#cropSkip{background:#1D3049;color:#E8EDF4;border:1px solid #26405F!important}
+#cropRot{background:#1D3049;color:#E8EDF4;border:1px solid #26405F!important;flex:0 0 56px!important}
+#cropDone{background:#FFB020;color:#12100A}
 </style>
 </head>
 <body>
@@ -607,7 +621,19 @@ $('galFile').onchange=e=>$('camFile').onchange(e);
 $('camFile').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   const reader=new FileReader();
-  reader.onload=()=>{
+  reader.onload=async()=>{
+    // document scans get the crop/enhance editor; timeline captures go straight through
+    const docScan=camPurpose&&camPurpose.mode!=='cap';
+    if(docScan){
+      const edited=await openCropTool(reader.result);
+      if(edited)reader.result2=edited;
+    }
+    processCaptured(reader.result2||reader.result);
+  };
+  reader.readAsDataURL(f);
+};
+function processCaptured(srcData){
+  {
     const img=new Image();
     img.onload=()=>{
       const MAX=1100;let w=img.width,h=img.height;
@@ -618,10 +644,9 @@ $('camFile').onchange=e=>{
       while(out.length>650000&&q>0.3){q-=0.1;out=cv.toDataURL('image/jpeg',q);}
       routePhoto(out);
     };
-    img.src=reader.result;
-  };
-  reader.readAsDataURL(f);
-};
+    img.src=srcData;
+  }
+}
 
 async function routePhoto(data){
   const p=camPurpose;camPurpose=null;if(!p)return;
@@ -945,6 +970,168 @@ async function batchDeparture(dropId){
 }
 
 boot();
+</script>
+
+<div id="cropModal">
+  <div id="cropWrap"><canvas id="cropCv"></canvas></div>
+  <div id="cropBar">
+    <button class="fchip on" data-f="original">Original</button>
+    <button class="fchip" data-f="enhanced">Enhanced</button>
+    <button class="fchip" data-f="bw">B&amp;W scan</button>
+  </div>
+  <div id="cropActions">
+    <button id="cropRot" title="Rotate">⟳</button>
+    <button id="cropSkip">Skip</button>
+    <button id="cropDone">✓ Done</button>
+  </div>
+</div>
+<script>
+/* ================= Crop & Enhance editor ================= */
+const CropTool={img:null,quad:null,scale:1,drag:-1,filter:'original',res:null};
+function openCropTool(dataUrl){
+  return new Promise(resolve=>{
+    CropTool.res=resolve;CropTool.filter='original';
+    document.querySelectorAll('#cropBar .fchip').forEach(c=>c.classList.toggle('on',c.dataset.f==='original'));
+    const im=new Image();
+    im.onload=()=>{CropTool.img=im;CropTool.quad=guessCorners(im);cropFit();cropRender();document.getElementById('cropModal').classList.add('on');};
+    im.src=dataUrl;
+  });
+}
+function cropFit(){
+  const cv=document.getElementById('cropCv');
+  const maxW=Math.min(window.innerWidth-28,700),maxH=window.innerHeight*0.62;
+  const k=Math.min(maxW/CropTool.img.width,maxH/CropTool.img.height,1);
+  CropTool.scale=k;cv.width=Math.round(CropTool.img.width*k);cv.height=Math.round(CropTool.img.height*k);
+}
+function guessCorners(im){
+  const W=170,k=W/im.width,H=Math.max(2,Math.round(im.height*k));
+  const c=document.createElement('canvas');c.width=W;c.height=H;
+  const x=c.getContext('2d');x.drawImage(im,0,0,W,H);
+  const d=x.getImageData(0,0,W,H).data,lum=new Float32Array(W*H);
+  let sum=0;
+  for(let i=0;i<W*H;i++){const v=(d[i*4]*0.299+d[i*4+1]*0.587+d[i*4+2]*0.114);lum[i]=v;sum+=v;}
+  const thr=sum/(W*H)*1.06; // paper is brighter than the table
+  let bright=0;for(let i=0;i<W*H;i++)if(lum[i]>thr)bright++;
+  const frac=bright/(W*H);
+  const inset=()=>[[im.width*.06,im.height*.06],[im.width*.94,im.height*.06],[im.width*.94,im.height*.94],[im.width*.06,im.height*.94]];
+  if(frac<0.12||frac>0.93)return inset(); // can't tell paper from background → safe margins
+  const corners=[[0,0],[W-1,0],[W-1,H-1],[0,H-1]],out=[];
+  for(const [cx,cy] of corners){
+    let best=null,bd=1e9;
+    for(let y=0;y<H;y++)for(let xx=0;xx<W;xx++){
+      if(lum[y*W+xx]>thr){const dd=(xx-cx)*(xx-cx)+(y-cy)*(y-cy);if(dd<bd){bd=dd;best=[xx,y];}}
+    }
+    out.push([best[0]/k,best[1]/k]);
+  }
+  // sanity: quad must cover a reasonable area
+  const area=Math.abs((out[1][0]-out[0][0])*(out[3][1]-out[0][1])-(out[3][0]-out[0][0])*(out[1][1]-out[0][1]));
+  if(area<im.width*im.height*0.15)return inset();
+  return out;
+}
+function cropRender(){
+  const cv=document.getElementById('cropCv'),x=cv.getContext('2d'),k=CropTool.scale,q=CropTool.quad;
+  x.clearRect(0,0,cv.width,cv.height);
+  x.drawImage(CropTool.img,0,0,cv.width,cv.height);
+  x.fillStyle='rgba(4,10,18,.55)';x.fillRect(0,0,cv.width,cv.height);
+  x.save();x.beginPath();x.moveTo(q[0][0]*k,q[0][1]*k);for(let i=1;i<4;i++)x.lineTo(q[i][0]*k,q[i][1]*k);x.closePath();x.clip();
+  x.drawImage(CropTool.img,0,0,cv.width,cv.height);x.restore();
+  x.strokeStyle='#FFB020';x.lineWidth=2;x.beginPath();x.moveTo(q[0][0]*k,q[0][1]*k);for(let i=1;i<4;i++)x.lineTo(q[i][0]*k,q[i][1]*k);x.closePath();x.stroke();
+  for(const [px,py] of q){x.beginPath();x.arc(px*k,py*k,11,0,7);x.fillStyle='#FFB020';x.fill();x.beginPath();x.arc(px*k,py*k,4,0,7);x.fillStyle='#12100A';x.fill();}
+}
+(function(){
+  const cv=document.getElementById('cropCv');
+  const pos=e=>{const r=cv.getBoundingClientRect();return [(e.clientX-r.left)/CropTool.scale,(e.clientY-r.top)/CropTool.scale];};
+  cv.addEventListener('pointerdown',e=>{
+    const [px,py]=pos(e);let bd=1e9,bi=-1;
+    CropTool.quad.forEach((c,i)=>{const dd=(c[0]-px)**2+(c[1]-py)**2;if(dd<bd){bd=dd;bi=i;}});
+    if(Math.sqrt(bd)*CropTool.scale<38){CropTool.drag=bi;cv.setPointerCapture(e.pointerId);}
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(CropTool.drag<0)return;
+    const [px,py]=pos(e);
+    CropTool.quad[CropTool.drag]=[Math.max(0,Math.min(CropTool.img.width,px)),Math.max(0,Math.min(CropTool.img.height,py))];
+    cropRender();
+  });
+  cv.addEventListener('pointerup',()=>CropTool.drag=-1);
+  document.querySelectorAll('#cropBar .fchip').forEach(c=>c.onclick=()=>{
+    document.querySelectorAll('#cropBar .fchip').forEach(z=>z.classList.remove('on'));
+    c.classList.add('on');CropTool.filter=c.dataset.f;
+  });
+  document.getElementById('cropRot').onclick=()=>{
+    const im=CropTool.img,c=document.createElement('canvas');c.width=im.height;c.height=im.width;
+    const x=c.getContext('2d');x.translate(c.width/2,c.height/2);x.rotate(Math.PI/2);x.drawImage(im,-im.width/2,-im.height/2);
+    const n=new Image();n.onload=()=>{CropTool.img=n;CropTool.quad=guessCorners(n);cropFit();cropRender();};n.src=c.toDataURL('image/jpeg',0.92);
+  };
+  document.getElementById('cropSkip').onclick=()=>{document.getElementById('cropModal').classList.remove('on');const r=CropTool.res;CropTool.res=null;if(r)r(null);};
+  document.getElementById('cropDone').onclick=()=>{
+    const out=warpAndFilter();
+    document.getElementById('cropModal').classList.remove('on');
+    const r=CropTool.res;CropTool.res=null;if(r)r(out);
+  };
+})();
+function homography(src,dst){ // solve H so that H·src ≈ dst (8 unknowns)
+  const A=[],b=[];
+  for(let i=0;i<4;i++){
+    const [x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);
+    A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v);
+  }
+  for(let c=0;c<8;c++){ // gaussian elimination
+    let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;
+    [A[c],A[p]]=[A[p],A[c]];[b[c],b[p]]=[b[p],b[c]];
+    for(let r=0;r<8;r++){if(r===c)continue;const f=A[r][c]/A[c][c];for(let k=c;k<8;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c];}
+  }
+  const h=b.map((v,i)=>v/A[i][i]);h.push(1);return h;
+}
+function warpAndFilter(){
+  const q=CropTool.quad,im=CropTool.img;
+  const len=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+  let W=Math.round((len(q[0],q[1])+len(q[3],q[2]))/2),H=Math.round((len(q[0],q[3])+len(q[1],q[2]))/2);
+  const mx=1500,k=Math.min(1,mx/Math.max(W,H));W=Math.max(60,Math.round(W*k));H=Math.max(60,Math.round(H*k));
+  const Hm=homography([[0,0],[W,0],[W,H],[0,H]],q); // dst → src
+  const sc=document.createElement('canvas');sc.width=im.width;sc.height=im.height;
+  sc.getContext('2d').drawImage(im,0,0);
+  const sd=sc.getContext('2d').getImageData(0,0,im.width,im.height).data;
+  const oc=document.createElement('canvas');oc.width=W;oc.height=H;
+  const octx=oc.getContext('2d'),od=octx.createImageData(W,H),o=od.data;
+  const iw=im.width,ih=im.height;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const d=Hm[6]*x+Hm[7]*y+Hm[8];
+    let sx=(Hm[0]*x+Hm[1]*y+Hm[2])/d,sy=(Hm[3]*x+Hm[4]*y+Hm[5])/d;
+    sx=Math.max(0,Math.min(iw-1.001,sx));sy=Math.max(0,Math.min(ih-1.001,sy));
+    const x0=sx|0,y0=sy|0,fx=sx-x0,fy=sy-y0;
+    const i00=(y0*iw+x0)*4,i10=i00+4,i01=i00+iw*4,i11=i01+4,oi=(y*W+x)*4;
+    for(let c=0;c<3;c++){
+      o[oi+c]=sd[i00+c]*(1-fx)*(1-fy)+sd[i10+c]*fx*(1-fy)+sd[i01+c]*(1-fx)*fy+sd[i11+c]*fx*fy;
+    }
+    o[oi+3]=255;
+  }
+  applyFilter(o,W,H,CropTool.filter);
+  octx.putImageData(od,0,0);
+  return oc.toDataURL('image/jpeg',0.85);
+}
+function applyFilter(o,W,H,mode){
+  if(mode==='original')return;
+  const n=W*H,hist=new Uint32Array(256);
+  for(let i=0;i<n;i++){const l=(o[i*4]*0.299+o[i*4+1]*0.587+o[i*4+2]*0.114)|0;hist[l]++;}
+  let lo=0,hi=255,acc=0;const cut=n*0.02;
+  for(let i=0;i<256;i++){acc+=hist[i];if(acc>cut){lo=i;break;}}
+  acc=0;for(let i=255;i>=0;i--){acc+=hist[i];if(acc>cut){hi=i;break;}}
+  const rng=Math.max(1,hi-lo);
+  if(mode==='enhanced'){
+    for(let i=0;i<n*4;i+=4)for(let c=0;c<3;c++){
+      o[i+c]=Math.max(0,Math.min(255,(o[i+c]-lo)*255/rng));
+    }
+  }else{ // bw scan look
+    for(let i=0;i<n*4;i+=4){
+      const g=(o[i]*0.299+o[i+1]*0.587+o[i+2]*0.114);
+      let t=(g-lo)/rng;t=Math.max(0,Math.min(1,t));
+      t=t<0.5?2*t*t:1-2*(1-t)*(1-t); // s-curve: darker text, whiter paper
+      const v=Math.round(t*255);
+      o[i]=o[i+1]=o[i+2]=v;
+    }
+  }
+}
 </script>
 </body>
 </html>
