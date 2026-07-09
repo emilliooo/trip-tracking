@@ -173,7 +173,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div class="thumbs" id="ph-dr"></div>
     </div>
     <div class="slot" id="slotPay" style="display:none">
-      <div class="head"><span class="name">Payment proof</span><button class="btn ghost small" data-scan="payment">📷 Photo</button></div>
+      <div class="head"><span class="name">Proof of Payment</span><span><button class="btn ghost small" data-scan="payment">📷 Photo</button> <button class="btn ghost small" data-upload="payment">🖼 Upload</button></span></div>
       <div class="thumbs" id="ph-payment"></div>
     </div>
   </div>
@@ -214,7 +214,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div class="full"><label>Customer</label><input id="fCust"></div>
       <div class="full"><label>Contact # <span class="note">(kept out of the Viber copy)</span></label><input id="fContact" inputmode="tel"></div>
       <div><label>MOP</label>
-        <select id="fMop"><option></option><option>COD</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select>
+        <select id="fMop"><option></option><option>COD</option><option>Check</option><option>Online Payment</option><option>Credit Card</option><option>PDC 30 Days</option><option>PDC 60 Days</option><option>30 Days</option><option>60 Days</option><option>N/A</option></select>
       </div>
       <div><label>Plate #</label><input id="fPlate"></div>
       <div class="full"><label>Location</label><input id="fLoc"></div>
@@ -251,6 +251,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 </div>
 <div class="toast" id="toast"></div>
 <input type="file" accept="image/*" capture="environment" id="camFile" hidden>
+<input type="file" accept="image/*" id="galFile" hidden>
 
 <script>
 /* ============ CONFIG — paste your Firebase config here once ============ */
@@ -442,7 +443,7 @@ function openTrip(id,t){
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
-    drops.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    drops.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
     const list=$('dropsList');list.innerHTML='';
     if(!drops.length){list.innerHTML='<div class="empty">No drops yet.<br>Scan the first Delivery Receipt.</div>';return;}
     drops.forEach((s,i)=>{
@@ -564,7 +565,7 @@ $('fDel').onchange=()=>{$('remReq').style.display=$('fDel').value==='Undelivered
 function renderDropHintOnly(){$('depHint').textContent=($('fDel').value==='Undelivered')?'Up to 2 photos: location or signed D.R with remarks':'If delivered: signed S.I, cheque, C.R, D.R — up to 4 photos in this slot';}
 function autoColl(){
   const del=$('fDel').value,mop=$('fMop').value;
-  $('fColl').value=(del==='Delivered'&&['COD','PDC 30 Days','PDC 60 Days'].includes(mop))?'Collected':'N/A';
+  $('fColl').value=(del==='Delivered'&&['COD','Check','PDC 30 Days','PDC 60 Days'].includes(mop))?'Collected':'N/A';
 }
 
 function renderPhotos(){
@@ -599,8 +600,10 @@ $('photoModal').onclick=e=>{if(e.target.id==='photoModal')$('photoModal').classL
 
 /* ============ camera routing ============ */
 document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{camPurpose={mode:'scan',kind:b.dataset.scan};$('camFile').click();});
+document.querySelectorAll('[data-upload]').forEach(b=>b.onclick=()=>{camPurpose={mode:'scan',kind:b.dataset.upload};$('galFile').click();});
 document.querySelectorAll('[data-cap]').forEach(b=>b.onclick=()=>{camPurpose={mode:'cap',kind:b.dataset.cap};$('camFile').click();});
 
+$('galFile').onchange=e=>$('camFile').onchange(e);
 $('camFile').onchange=e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
   const reader=new FileReader();
@@ -654,7 +657,7 @@ async function routePhoto(data){
     const t=phNow();
     if(p.kind==='arrival'&&!dropData.arrival){up.arrival=t;up.arrivalMs=Date.now();up.location2=await getGPS();}
     if(p.kind==='received'&&!dropData.received){up.received=t;}
-    if(p.kind==='departure'&&!dropData.departure){up.departure=t;}
+    if(p.kind==='departure'&&!dropData.departure){up.departure=t;up.departureMs=Date.now();}
     log('drop.capture',dropData.ticket+'/'+(dropData.doc||curDrop),p.kind+' @ '+t);
   }else log('drop.scan',dropData.ticket+'/'+(dropData.doc||curDrop),p.kind);
   await db.collection('tt_drops').doc(curDrop).update(up);
@@ -663,7 +666,7 @@ async function routePhoto(data){
   const dropId=curDrop, ticketRef=(dropData.ticket||'')+'/'+(dropData.doc||curDrop);
   if(p.kind==='si'){
     runScan(async()=>{
-      const ex=await gemini(data,'This is a Sales Invoice (S.I). Extract ONLY these 5 fields with EXACT labels: "S.I #" = the Invoice No., "Amount" = the Total Amount, "Customer" = the Sold to name, "MOP" = the Term (map to one of: COD, Online Payment, Credit Card, PDC 30 Days, PDC 60 Days, 30 Days, 60 Days, N/A — e.g. Cash means COD), "Address" = ONLY the city or province, "Contact #" = the customer phone number ONLY if clearly visible (+639 format).');
+      const ex=await gemini(data,'This is a Sales Invoice (S.I). Extract ONLY these 5 fields with EXACT labels: "S.I #" = the Invoice No., "Amount" = the Total Amount, "Customer" = the Sold to name, "MOP" = the Term (map to one of: COD, Check, Online Payment, Credit Card, PDC 30 Days, PDC 60 Days, 30 Days, 60 Days, N/A — e.g. Cash means COD, Cheque means Check), "Address" = ONLY the city or province, "Contact #" = the customer phone number ONLY if clearly visible (+639 format).');
       const f=ex.fields||{};const u={updatedAt:SV()};
       const cur=(await db.collection('tt_drops').doc(dropId).get()).data()||{};
       if(f['S.I #'])u.si=f['S.I #'];if(f['Amount'])u.amount=f['Amount'];
@@ -735,7 +738,7 @@ async function buildSheetPayload(id,s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
     const i=arr.findIndex(x=>x.id===id);if(i>-1)dropNo=i+1;
   }catch(e){}
   const und=s.delStatus==='Undelivered';
@@ -793,7 +796,7 @@ $('btnSubmit').onclick=async()=>{
   if(f.delStatus==='Undelivered'&&!f.remarks){$('remReq').style.display='inline';toast('Remarks are required for Undelivered');return;}
   const hasDR=dropPhotos.some(p=>p.kind==='dr');
   if(!hasDR){toast('Delivery Receipt scan is required');return;}
-  if(f.delStatus==='Delivered'&&['COD','PDC 30 Days','PDC 60 Days'].includes(f.mop))f.collStatus='Collected';
+  if(f.delStatus==='Delivered'&&['COD','Check','PDC 30 Days','PDC 60 Days'].includes(f.mop))f.collStatus='Collected';
   if(f.mop==='Online Payment')f.collStatus='N/A';
   f.status='submitted';
   await db.collection('tt_drops').doc(curDrop).update(f);
@@ -815,7 +818,7 @@ async function buildDetails(s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.arrivalMs||a.createdMs||0)-(b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
     const i=arr.findIndex(x=>x.id===(s.id||curDrop));if(i>-1)dropNo=i+1;
   }catch(e){}
   return 'Trip Ticket #: '+(s.ticket||'')+
