@@ -162,7 +162,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
   <button class="back" data-back="trips">‹ Trips</button>
   <div class="card" id="tripHead"></div>
   <div class="card"><div class="slot" style="margin:0">
-    <div class="head"><span class="name">Trip Ticket photo</span><button class="btn ghost small" id="btnTicketPhoto">📷 Add</button></div>
+    <div class="head"><span class="name">Trip Ticket photo</span><span><button class="btn ghost small" id="btnTicketPhoto">📷</button> <button class="btn ghost small" id="btnTicketUpload">🖼</button></span></div>
     <div class="thumbs" id="ph-ticket"></div>
   </div></div>
   <button class="btn amber" id="btnNewDrop" style="margin-bottom:13px">📷 New drop — scan Delivery Receipt</button>
@@ -179,16 +179,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
   <div class="card">
     <div class="st">DOCUMENTS</div>
     <div class="slot" id="slotSI">
-      <div class="head"><span class="name">Sales Invoice</span><button class="btn ghost small" data-scan="si">📷 Scan</button></div>
+      <div class="head"><span class="name">Sales Invoice</span><span><button class="btn ghost small" data-scan="si">📷</button> <button class="btn ghost small" data-upload="si">🖼</button></span></div>
       <div class="thumbs" id="ph-si"></div>
     </div>
     <div class="slot" id="slotDR">
-      <div class="head"><span class="name">Delivery Receipt</span><button class="btn ghost small" data-scan="dr">📷 Scan</button></div>
+      <div class="head"><span class="name">Delivery Receipt</span><span><button class="btn ghost small" data-scan="dr">📷</button> <button class="btn ghost small" data-upload="dr">🖼</button></span></div>
       <div class="thumbs" id="ph-dr"></div>
-    </div>
-    <div class="slot" id="slotPay" style="display:none">
-      <div class="head"><span class="name">Proof of Payment</span><span><button class="btn ghost small" data-scan="payment">📷 Photo</button> <button class="btn ghost small" data-upload="payment">🖼 Upload</button></span></div>
-      <div class="thumbs" id="ph-payment"></div>
     </div>
   </div>
 
@@ -198,19 +194,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div class="head"><span class="name">Arrival</span><span class="time" id="tArr">—</span></div>
       <div class="thumbs" id="ph-arrival"></div>
       <div class="gap"></div>
-      <button class="btn ghost small" data-cap="arrival">📍 Capture arrival</button>
+      <div class="row"><button class="btn ghost small" data-cap="arrival" style="flex:1">📍 Capture arrival</button><button class="btn ghost small" data-upcap="arrival" style="flex:0 0 52px">🖼</button></div>
     </div>
     <div class="slot">
       <div class="head"><span class="name">Time Received</span><span class="time" id="tRec">—</span></div>
       <div class="thumbs" id="ph-received"></div>
       <div class="gap"></div>
-      <button class="btn ghost small" data-cap="received">📷 Capture received</button>
+      <div class="row"><button class="btn ghost small" data-cap="received" style="flex:1">📷 Capture received</button><button class="btn ghost small" data-upcap="received" style="flex:0 0 52px">🖼</button></div>
     </div>
     <div class="slot">
       <div class="head"><span class="name">Departure</span><span class="time" id="tDep">—</span></div>
       <div class="thumbs" id="ph-departure"></div>
       <div class="gap"></div>
-      <button class="btn ghost small" data-cap="departure">🏁 Capture departure</button>
+      <div class="row"><button class="btn ghost small" data-cap="departure" style="flex:1">🏁 Capture departure</button><button class="btn ghost small" data-upcap="departure" style="flex:0 0 52px">🖼</button></div>
       <div class="note" id="depHint" style="margin-top:7px"></div>
     </div>
   </div>
@@ -240,6 +236,21 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       </div>
       <div class="full"><label>Remarks <span id="remReq" style="color:var(--bad);display:none">(required for Undelivered)</span></label><textarea id="fRem"></textarea></div>
     </div>
+    <div class="gap"></div>
+    <div class="st">PROOF OF DELIVERY</div>
+    <div class="slot">
+      <div class="head"><span class="name">Scanned S.I — signed (C.R / cheque on top if any)</span><span><button class="btn ghost small" data-scan="podsi">📷</button> <button class="btn ghost small" data-upload="podsi">🖼</button></span></div>
+      <div class="thumbs" id="ph-podsi"></div>
+    </div>
+    <div class="slot">
+      <div class="head"><span class="name">Delivery Receipt — signed by customer</span><span><button class="btn ghost small" data-scan="poddr">📷</button> <button class="btn ghost small" data-upload="poddr">🖼</button></span></div>
+      <div class="thumbs" id="ph-poddr"></div>
+    </div>
+    <div class="slot" id="slotPay" style="display:none">
+      <div class="head"><span class="name">Proof of Payment</span><span><button class="btn ghost small" data-scan="payment">📷 Photo</button> <button class="btn ghost small" data-upload="payment">🖼 Upload</button></span></div>
+      <div class="thumbs" id="ph-payment"></div>
+    </div>
+
     <div class="gap"></div>
     <button class="btn ghost" id="btnSaveDraft">Save</button>
     <div class="gap"></div>
@@ -294,6 +305,15 @@ let dropPhotos=[];
 const $=id=>document.getElementById(id);
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* drop ordering: timed drops first (by departure, else arrival); untimed ones pile at the bottom by creation order */
+function dropOrder(a,b){
+  const ka=a.departureMs||a.arrivalMs||0, kb=b.departureMs||b.arrivalMs||0;
+  if(ka&&kb)return ka-kb;
+  if(ka)return -1;
+  if(kb)return 1;
+  return (a.createdMs||0)-(b.createdMs||0);
+}
 const phNow=()=>new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Manila'});
 const phToday=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(new Date());
 let SV=()=>Date.now();
@@ -457,7 +477,7 @@ function openTrip(id,t){
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
-    drops.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
+    drops.sort((a,b)=>dropOrder(a,b));
     const list=$('dropsList');list.innerHTML='';
     if(!drops.length){list.innerHTML='<div class="empty">No drops yet.<br>Scan the first Delivery Receipt.</div>';return;}
     drops.forEach((s,i)=>{
@@ -572,11 +592,11 @@ function renderDrop(){
   $('tArr').textContent=s.arrival||'—';$('tRec').textContent=s.received||'—';$('tDep').textContent=s.departure||'—';
   $('slotPay').style.display=(s.mop==='Online Payment'||$('fMop').value==='Online Payment')?'block':'none';
   $('remReq').style.display=($('fDel').value==='Undelivered')?'inline':'none';
-  $('depHint').textContent = ($('fDel').value==='Undelivered')?'Up to 2 photos: location or signed D.R with remarks':'If delivered: signed S.I, cheque, C.R, D.R — up to 4 photos in this slot';
+  $('depHint').textContent = ($('fDel').value==='Undelivered')?'Up to 2 photos: location, with remarks below':'Departure photos (up to 4). Signed documents go in Proof of Delivery below.';
 }
 $('fMop').onchange=()=>{$('slotPay').style.display=$('fMop').value==='Online Payment'?'block':'none';autoColl();};
 $('fDel').onchange=()=>{$('remReq').style.display=$('fDel').value==='Undelivered'?'inline':'none';autoColl();renderDropHintOnly();};
-function renderDropHintOnly(){$('depHint').textContent=($('fDel').value==='Undelivered')?'Up to 2 photos: location or signed D.R with remarks':'If delivered: signed S.I, cheque, C.R, D.R — up to 4 photos in this slot';}
+function renderDropHintOnly(){$('depHint').textContent=($('fDel').value==='Undelivered')?'Up to 2 photos: location, with remarks below':'Departure photos (up to 4). Signed documents go in Proof of Delivery below.';}
 function autoColl(){
   const del=$('fDel').value,mop=$('fMop').value;
   $('fColl').value=(del==='Delivered'&&['COD','Check','PDC 30 Days','PDC 60 Days'].includes(mop))?'Collected':'N/A';
@@ -584,7 +604,7 @@ function autoColl(){
 
 function renderPhotos(){
   const locked = dropData && dropData.status==='submitted';
-  ['si','dr','payment','arrival','received','departure'].forEach(kind=>{
+  ['si','dr','payment','podsi','poddr','arrival','received','departure'].forEach(kind=>{
     const box=$('ph-'+kind);if(!box)return;box.innerHTML='';
     dropPhotos.filter(p=>p.kind===kind).forEach(p=>{
       const w=document.createElement('div');w.className='thumbwrap';
@@ -615,6 +635,8 @@ $('photoModal').onclick=e=>{if(e.target.id==='photoModal')$('photoModal').classL
 /* ============ camera routing ============ */
 document.querySelectorAll('[data-scan]').forEach(b=>b.onclick=()=>{camPurpose={mode:'scan',kind:b.dataset.scan};$('camFile').click();});
 document.querySelectorAll('[data-upload]').forEach(b=>b.onclick=()=>{camPurpose={mode:'scan',kind:b.dataset.upload};$('galFile').click();});
+document.querySelectorAll('[data-upcap]').forEach(b=>b.onclick=()=>{camPurpose={mode:'cap',kind:b.dataset.upcap};$('galFile').click();});
+$('btnTicketUpload').onclick=()=>{if(tripPhotos.length>=2){toast('Photo limit reached (2)');return;}camPurpose={mode:'ticketphoto'};$('galFile').click();};
 document.querySelectorAll('[data-cap]').forEach(b=>b.onclick=()=>{camPurpose={mode:'cap',kind:b.dataset.cap};$('camFile').click();});
 
 $('galFile').onchange=e=>$('camFile').onchange(e);
@@ -673,7 +695,7 @@ async function routePhoto(data){
     return;
   }
   if(!curDrop)return;
-  const caps={departure:($('fDel').value==='Undelivered')?2:4,payment:2,arrival:2,received:2,si:2,dr:2};
+  const caps={departure:($('fDel').value==='Undelivered')?2:4,payment:2,arrival:2,received:2,si:2,dr:2,podsi:3,poddr:2};
   const have=dropPhotos.filter(x=>x.kind===p.kind).length;
   if(have>=(caps[p.kind]||2)){toast('Photo limit reached for this slot');return;}
   await addPhoto(curDrop,p.kind,data);
@@ -716,6 +738,22 @@ async function routePhoto(data){
   }
   /* departure photos are NOT scanned one by one anymore —
      all of them are read together in ONE request when the drop is submitted */
+  if(p.kind==='podsi'){
+    runScan(async()=>{
+      const ex=await gemini(data,'This is a signed Sales Invoice from a completed delivery. Sometimes a Collection Receipt (C.R), a cheque, or cash money is placed on top of it. Extract ONLY if clearly visible: "C.R #" = the Collection Receipt number, "Check #" = the cheque number, "Cash Present" = "yes" ONLY if physical paper money / cash bills are visible in the photo. Omit anything not clearly visible.');
+      const f=ex.fields||{};const u={updatedAt:SV()};
+      const cur=(await db.collection('tt_drops').doc(dropId).get()).data()||{};
+      if(f['C.R #'])u.cr=f['C.R #'];
+      if(f['Check #']&&!cur.payref)u.payref=f['Check #'];
+      if(String(f['Cash Present']||'').toLowerCase()==='yes'){u.mop='COD';}
+      if(Object.keys(u).length>1){
+        await db.collection('tt_drops').doc(dropId).update(u);
+        log('drop.autofill',ticketRef,'From signed S.I: '+Object.keys(u).filter(k=>k!=='updatedAt').join(', '));
+        toast((u.mop==='COD'?'Cash detected → MOP set to COD. ':'')+'Signed S.I read ✓');
+      }
+    },'Signed S.I scan');
+  }
+  /* signed D.R (poddr) is photo-only — no extraction, per spec */
   if(p.kind==='payment'){
     runScan(async()=>{
       const ex=await gemini(data,'This is an online payment proof (e.g. GCash, bank transfer screenshot, or receipt). Extract ONLY: "Payment Ref" = the reference number, "Amount" = the amount paid if visible.');
@@ -763,7 +801,7 @@ async function buildSheetPayload(id,s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>dropOrder(a,b));
     const i=arr.findIndex(x=>x.id===id);if(i>-1)dropNo=i+1;
   }catch(e){}
   const und=s.delStatus==='Undelivered';
@@ -827,11 +865,7 @@ $('btnSubmit').onclick=async()=>{
   await db.collection('tt_drops').doc(curDrop).update(f);
   log('drop.submit',dropData.ticket+'/'+(f.doc||curDrop),f.delStatus+' · '+(f.customer||''));
   toast('Drop submitted ✓');
-  // read ALL departure photos in one request, in the background (C.R # + Payment Ref)
-  if(f.delStatus!=='Undelivered'&&(!f.cr||!f.payref)){
-    const id=curDrop;
-    runScan(()=>batchDeparture(id),'C.R / Payment Ref');
-  }
+  // (C.R / cheque reading now happens on the Proof of Delivery signed S.I slot)
   // send row + resized photos to Google Sheet/Drive (background, auto-retries)
   sendSheetRow(curDrop,{...dropData,...f});
   await openDetails({...dropData,...f});
@@ -843,7 +877,7 @@ async function buildDetails(s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>dropOrder(a,b));
     const i=arr.findIndex(x=>x.id===(s.id||curDrop));if(i>-1)dropNo=i+1;
   }catch(e){}
   return 'Trip Ticket #: '+(s.ticket||'')+
@@ -968,6 +1002,29 @@ async function batchDeparture(dropId){
   if(f['C.R #'])u.cr=f['C.R #'];if(f['Payment Ref'])u.payref=f['Payment Ref'];
   if(u.cr||u.payref){await db.collection('tt_drops').doc(dropId).update(u);}
 }
+
+
+/* ================= swipe right = back ================= */
+let _swX=null,_swY=null;
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1){_swX=null;return;}
+  _swX=e.touches[0].clientX;_swY=e.touches[0].clientY;
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(_swX===null)return;
+  const dx=e.changedTouches[0].clientX-_swX;
+  const dy=Math.abs(e.changedTouches[0].clientY-_swY);
+  const fromLeft=_swX<window.innerWidth*0.4;_swX=null;
+  if(dx<70||dy>60||!fromLeft)return;
+  const on=id=>{const el=document.getElementById(id);return el&&el.classList.contains('on');};
+  if(on('cropModal'))return; // never while cropping
+  if(on('photoModal')){document.getElementById('photoModal').classList.remove('on');return;}
+  if(on('detModal')){document.getElementById('detModal').classList.remove('on');return;}
+  const vis=id=>document.getElementById(id)&&document.getElementById(id).style.display==='block';
+  if(vis('vDrop')){document.querySelector('#vDrop .back').click();return;}
+  if(vis('vTrip')){document.querySelector('#vTrip .back').click();return;}
+  if(vis('vNewTrip')){document.querySelector('#vNewTrip .back').click();return;}
+},{passive:true});
 
 boot();
 </script>
