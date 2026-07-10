@@ -141,6 +141,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
       <div class="st">DOCUMENTS</div>
       <div class="slot"><div class="head"><span class="name">Sales Invoice</span></div><div class="thumbs" id="ph-si"><span class="note">None</span></div></div>
       <div class="slot"><div class="head"><span class="name">Delivery Receipt</span></div><div class="thumbs" id="ph-dr"><span class="note">None</span></div></div>
+      <div class="slot"><div class="head"><span class="name">Proof of Delivery — signed S.I</span></div><div class="thumbs" id="ph-podsi"><span class="note">None</span></div></div>
+      <div class="slot"><div class="head"><span class="name">Proof of Delivery — signed D.R</span></div><div class="thumbs" id="ph-poddr"><span class="note">None</span></div></div>
       <div class="slot" id="slotPay" style="display:none"><div class="head"><span class="name">Proof of Payment</span></div><div class="thumbs" id="ph-payment"></div></div>
     </div>
     <div class="card">
@@ -295,6 +297,15 @@ let allTrips=[],allDropsCache=null;
 const $=id=>document.getElementById(id);
 const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);};
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* drop ordering: timed drops first (by departure, else arrival); untimed ones pile at the bottom by creation order */
+function dropOrder(a,b){
+  const ka=a.departureMs||a.arrivalMs||0, kb=b.departureMs||b.arrivalMs||0;
+  if(ka&&kb)return ka-kb;
+  if(ka)return -1;
+  if(kb)return 1;
+  return (a.createdMs||0)-(b.createdMs||0);
+}
 let SV=()=>Date.now();
 
 /* ---- in-memory mock DB for TEST MODE (no Firebase needed) ---- */
@@ -494,7 +505,7 @@ function openTrip(t){
   if(unsubDrops)unsubDrops();
   unsubDrops=db.collection('tt_drops').where('tripId','==',t.id).onSnapshot(snap=>{
     const drops=[];snap.forEach(d=>drops.push({id:d.id,...d.data()}));
-    drops.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
+    drops.sort((a,b)=>dropOrder(a,b));
     const list=$('dropsList');list.innerHTML='';
     if(!drops.length){list.innerHTML='<div class="empty">No drops on this trip yet.</div>';return;}
     drops.forEach((s,i)=>{
@@ -532,7 +543,7 @@ function renderDrop(){
 }
 function renderPhotos(){
   const locked = dropData && dropData.status==='submitted';
-  ['si','dr','payment','arrival','received','departure'].forEach(kind=>{
+  ['si','dr','payment','podsi','poddr','arrival','received','departure'].forEach(kind=>{
     const box=$('ph-'+kind);if(!box)return;box.innerHTML='';
     const ph=dropPhotos.filter(p=>p.kind===kind);
     if(!ph.length){box.innerHTML='<span class="note">None</span>';return;}
@@ -565,7 +576,7 @@ async function buildDetails(s){
   try{
     const snap=await db.collection('tt_drops').where('tripId','==',s.tripId).get();
     const arr=[];snap.forEach(d=>arr.push({id:d.id,...d.data()}));
-    arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0));
+    arr.sort((a,b)=>dropOrder(a,b));
     const i=arr.findIndex(x=>x.id===(s.id||curDrop));if(i>-1)dropNo=i+1;
   }catch(e){}
   return 'Trip Ticket #: '+(s.ticket||'')+
@@ -749,7 +760,7 @@ $('btnExportCsv').onclick=async()=>{
   const tmap={};allTrips.forEach(t=>tmap[t.id]=t);
   // compute Drop # per trip by arrival order
   const byTrip={};drops.forEach(s=>{(byTrip[s.tripId]=byTrip[s.tripId]||[]).push(s);});
-  Object.values(byTrip).forEach(arr=>arr.sort((a,b)=>(a.departureMs||a.arrivalMs||a.createdMs||0)-(b.departureMs||b.arrivalMs||b.createdMs||0)).forEach((s,i)=>s._dropNo=i+1));
+  Object.values(byTrip).forEach(arr=>arr.sort((a,b)=>dropOrder(a,b)).forEach((s,i)=>s._dropNo=i+1));
   const rows=[['Trip Ticket #','Date','Drop #','S.I #','Doc #','Amount','C.R #','Payment Ref','Customer','Contact #','Arrival','Time Received','Departure','Del. Status','Coll Status','MOP','Plate #','Location','Remarks','Driver','Loader']];
   drops.sort((a,b)=>(a.ticket||'').localeCompare(b.ticket||'')||(a._dropNo-b._dropNo)).forEach(s=>{
     const t=tmap[s.tripId]||{};
@@ -762,6 +773,27 @@ $('btnExportCsv').onclick=async()=>{
   log('export.csv','',drops.length+' drops');
   toast('CSV downloaded');
 };
+
+
+/* ================= swipe right = back ================= */
+let _swX=null,_swY=null;
+document.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1){_swX=null;return;}
+  _swX=e.touches[0].clientX;_swY=e.touches[0].clientY;
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(_swX===null)return;
+  const dx=e.changedTouches[0].clientX-_swX;
+  const dy=Math.abs(e.changedTouches[0].clientY-_swY);
+  const fromLeft=_swX<window.innerWidth*0.4;_swX=null;
+  if(dx<70||dy>60||!fromLeft)return;
+  const on=id=>{const el=document.getElementById(id);return el&&el.classList.contains('on');};
+  if(on('photoModal')){document.getElementById('photoModal').classList.remove('on');return;}
+  if(on('detModal')){document.getElementById('detModal').classList.remove('on');return;}
+  const vis=id=>document.getElementById(id).style.display!=='none';
+  if(vis('dropView')){document.getElementById('backTrip').click();return;}
+  if(vis('tripView')){document.getElementById('backHome').click();return;}
+},{passive:true});
 
 boot();
 </script>
