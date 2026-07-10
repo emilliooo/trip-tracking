@@ -85,6 +85,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .thumbwrap{position:relative;display:inline-block}
 .thumbdel{position:absolute;top:-7px;right:-7px;background:var(--bad);color:#fff;border:none;border-radius:999px;width:21px;height:21px;font-size:11px;cursor:pointer;line-height:1;font-weight:700}
 .thumbsave{position:absolute;bottom:-7px;right:-7px;background:var(--amber);color:#12100A;border:none;border-radius:999px;width:21px;height:21px;font-size:11px;cursor:pointer;line-height:1}
+.podgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.podgrid .slot{margin:0;padding:10px}
+.podgrid .head{flex-direction:column;align-items:flex-start;gap:6px;margin-bottom:7px}
+.podgrid .name{font-size:12px;line-height:1.35}
+.podgrid .thumb{width:46px;height:46px}
 
 /* ---- crop & enhance editor ---- */
 #cropModal{position:fixed;inset:0;background:rgba(4,10,18,.96);display:none;z-index:80;flex-direction:column;padding:14px;gap:10px}
@@ -238,17 +243,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     </div>
     <div class="gap"></div>
     <div class="st">PROOF OF DELIVERY</div>
-    <div class="slot">
-      <div class="head"><span class="name">Scanned S.I — signed (C.R / cheque on top if any)</span><span><button class="btn ghost small" data-scan="podsi">📷</button> <button class="btn ghost small" data-upload="podsi">🖼</button></span></div>
-      <div class="thumbs" id="ph-podsi"></div>
-    </div>
-    <div class="slot">
-      <div class="head"><span class="name">Delivery Receipt — signed by customer</span><span><button class="btn ghost small" data-scan="poddr">📷</button> <button class="btn ghost small" data-upload="poddr">🖼</button></span></div>
-      <div class="thumbs" id="ph-poddr"></div>
-    </div>
-    <div class="slot" id="slotPay" style="display:none">
-      <div class="head"><span class="name">Proof of Payment</span><span><button class="btn ghost small" data-scan="payment">📷 Photo</button> <button class="btn ghost small" data-upload="payment">🖼 Upload</button></span></div>
-      <div class="thumbs" id="ph-payment"></div>
+    <div class="podgrid">
+      <div class="slot">
+        <div class="head"><span class="name">Signed S.I<br><span class="note">C.R / cheque on top if any</span></span><span><button class="btn ghost small" data-scan="podsi">📷</button> <button class="btn ghost small" data-upload="podsi">🖼</button></span></div>
+        <div class="thumbs" id="ph-podsi"></div>
+      </div>
+      <div class="slot">
+        <div class="head"><span class="name">Signed D.R<br><span class="note">customer signature</span></span><span><button class="btn ghost small" data-scan="poddr">📷</button> <button class="btn ghost small" data-upload="poddr">🖼</button></span></div>
+        <div class="thumbs" id="ph-poddr"></div>
+      </div>
+      <div class="slot" id="slotPay" style="display:none;grid-column:1/-1">
+        <div class="head"><span class="name">Proof of Payment</span><span><button class="btn ghost small" data-scan="payment">📷</button> <button class="btn ghost small" data-upload="payment">🖼</button></span></div>
+        <div class="thumbs" id="ph-payment"></div>
+      </div>
     </div>
 
     <div class="gap"></div>
