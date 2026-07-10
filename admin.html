@@ -53,6 +53,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .podgrid .slot{margin:0;padding:10px}
 .podgrid .name{font-size:12px}
 .podgrid .thumb{width:46px;height:46px}
+.tlgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tlgrid .slot{margin:0;padding:9px 7px;text-align:center}
+.tlgrid .tlname{font-size:12px;font-weight:600}
+.tlgrid .time{font-size:12px;color:var(--muted);display:block;margin:4px 0 7px}
+.tlgrid .thumbs{justify-content:center}
+.tlgrid .thumb{width:44px;height:44px}
 .tripcards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;cursor:pointer}
 .tcard .tk{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;letter-spacing:.5px}
@@ -153,9 +159,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
     </div>
     <div class="card">
       <div class="st">TIMELINE</div>
-      <div class="slot"><div class="head"><span class="name">Arrival</span><span class="time" id="tArr">—</span></div><div class="thumbs" id="ph-arrival"></div></div>
-      <div class="slot"><div class="head"><span class="name">Time Received</span><span class="time" id="tRec">—</span></div><div class="thumbs" id="ph-received"></div></div>
-      <div class="slot"><div class="head"><span class="name">Departure</span><span class="time" id="tDep">—</span></div><div class="thumbs" id="ph-departure"></div></div>
+      <div class="tlgrid">
+        <div class="slot"><div class="tlname">Arrival</div><span class="time" id="tArr">—</span><div class="thumbs" id="ph-arrival"></div></div>
+        <div class="slot"><div class="tlname">Received</div><span class="time" id="tRec">—</span><div class="thumbs" id="ph-received"></div></div>
+        <div class="slot"><div class="tlname">Departure</div><span class="time" id="tDep">—</span><div class="thumbs" id="ph-departure"></div></div>
+      </div>
     </div>
     <div class="card">
       <div class="st">DETAILS (admin edit)</div>
