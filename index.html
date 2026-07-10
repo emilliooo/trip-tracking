@@ -90,6 +90,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 .podgrid .head{flex-direction:column;align-items:flex-start;gap:6px;margin-bottom:7px}
 .podgrid .name{font-size:12px;line-height:1.35}
 .podgrid .thumb{width:46px;height:46px}
+.tlgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tlgrid .slot{margin:0;padding:9px 7px;text-align:center;display:flex;flex-direction:column;gap:7px}
+.tlgrid .tlname{font-size:12px;font-weight:600}
+.tlgrid .time{font-size:12px;color:var(--muted)}
+.tlgrid .thumbs{justify-content:center;min-height:46px}
+.tlgrid .thumb{width:44px;height:44px}
+.tlgrid .tlbtns{display:flex;gap:6px;justify-content:center;margin-top:auto}
+.tlgrid .tlbtns button{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 0;font-size:15px;cursor:pointer;flex:1}
 
 /* ---- crop & enhance editor ---- */
 #cropModal{position:fixed;inset:0;background:rgba(4,10,18,.96);display:none;z-index:80;flex-direction:column;padding:14px;gap:10px}
@@ -195,25 +203,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--amber);outline-o
 
   <div class="card">
     <div class="st">TIMELINE</div>
-    <div class="slot">
-      <div class="head"><span class="name">Arrival</span><span class="time" id="tArr">—</span></div>
-      <div class="thumbs" id="ph-arrival"></div>
-      <div class="gap"></div>
-      <div class="row"><button class="btn ghost small" data-cap="arrival" style="flex:1">📍 Capture arrival</button><button class="btn ghost small" data-upcap="arrival" style="flex:0 0 52px">🖼</button></div>
+    <div class="tlgrid">
+      <div class="slot">
+        <div class="tlname">Arrival</div>
+        <div class="time" id="tArr">—</div>
+        <div class="thumbs" id="ph-arrival"></div>
+        <div class="tlbtns"><button data-cap="arrival" title="Camera">📍</button><button data-upcap="arrival" title="Upload">🖼</button></div>
+      </div>
+      <div class="slot">
+        <div class="tlname">Received</div>
+        <div class="time" id="tRec">—</div>
+        <div class="thumbs" id="ph-received"></div>
+        <div class="tlbtns"><button data-cap="received" title="Camera">📷</button><button data-upcap="received" title="Upload">🖼</button></div>
+      </div>
+      <div class="slot">
+        <div class="tlname">Departure</div>
+        <div class="time" id="tDep">—</div>
+        <div class="thumbs" id="ph-departure"></div>
+        <div class="tlbtns"><button data-cap="departure" title="Camera">🏁</button><button data-upcap="departure" title="Upload">🖼</button></div>
+      </div>
     </div>
-    <div class="slot">
-      <div class="head"><span class="name">Time Received</span><span class="time" id="tRec">—</span></div>
-      <div class="thumbs" id="ph-received"></div>
-      <div class="gap"></div>
-      <div class="row"><button class="btn ghost small" data-cap="received" style="flex:1">📷 Capture received</button><button class="btn ghost small" data-upcap="received" style="flex:0 0 52px">🖼</button></div>
-    </div>
-    <div class="slot">
-      <div class="head"><span class="name">Departure</span><span class="time" id="tDep">—</span></div>
-      <div class="thumbs" id="ph-departure"></div>
-      <div class="gap"></div>
-      <div class="row"><button class="btn ghost small" data-cap="departure" style="flex:1">🏁 Capture departure</button><button class="btn ghost small" data-upcap="departure" style="flex:0 0 52px">🖼</button></div>
-      <div class="note" id="depHint" style="margin-top:7px"></div>
-    </div>
+    <div class="note" id="depHint" style="margin-top:8px"></div>
   </div>
 
   <div class="card">
